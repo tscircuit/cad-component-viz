@@ -524,13 +524,6 @@ function App() {
     setImportError(null);
   };
 
-  const resetSample = () => {
-    const sample = normalizeCadComponent(SAMPLE_CAD_COMPONENT);
-    setCad(sample);
-    setImportText(JSON.stringify(sample, null, 2));
-    setImportError(null);
-  };
-
   const modelScene = useMemo(
     () => (scene: THREE.Scene) => {
       addDefaultLights(scene);
@@ -643,12 +636,6 @@ function App() {
         </div>
 
         <div className={`status-pill ${statusClass}`}>{message}</div>
-
-        <div className="actions">
-          <button type="button" onClick={resetSample}>
-            Reset sample
-          </button>
-        </div>
 
         <Section title="cad_component">
           <SelectField<AxisDirection>
