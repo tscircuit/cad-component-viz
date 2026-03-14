@@ -30,8 +30,7 @@ export function normalizeCadComponent(
 		name: input.name ?? "Unnamed cad_component",
 		description: input.description ?? "",
 		model_obj_url: input.model_obj_url ?? "",
-		model_bounds: input.model_bounds ?? { width: 16, height: 12, depth: 6 },
-		board_thickness: input.board_thickness ?? 1.6,
+		size: input.size ?? { x: 16, y: 12, z: 6 },
 		model_board_normal_direction: input.model_board_normal_direction ?? "z+",
 		model_origin_alignment:
 			input.model_origin_alignment ?? "center_of_component_board_surface",
@@ -76,9 +75,9 @@ export function buildFallbackGeometry(
 	input: Required<CadComponentInput>,
 ): THREE.BufferGeometry {
 	const geometry = new THREE.BoxGeometry(
-		input.model_bounds.width,
-		input.model_bounds.height,
-		input.model_bounds.depth,
+		input.size.x,
+		input.size.y,
+		input.size.z,
 	);
 	const { x, y, z } = input.model_origin_position;
 	geometry.translate(-x, -y, -z);

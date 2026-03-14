@@ -33,7 +33,7 @@ export function createCamera(up: THREE.Vector3) {
 }
 
 export function createControls(
-	camera: THREE.PerspectiveCamera,
+	camera: THREE.Camera,
 	canvas: HTMLCanvasElement,
 ) {
 	const controls = new OrbitControls(camera, canvas);
@@ -44,7 +44,7 @@ export function createControls(
 
 export function fitRenderer(
 	renderer: THREE.WebGLRenderer,
-	camera: THREE.PerspectiveCamera,
+	camera: THREE.Camera,
 	canvas: HTMLCanvasElement,
 ) {
 	const { clientWidth, clientHeight } = canvas;
@@ -52,8 +52,18 @@ export function fitRenderer(
 		return;
 	}
 	renderer.setSize(clientWidth, clientHeight, false);
-	camera.aspect = clientWidth / clientHeight;
-	camera.updateProjectionMatrix();
+	if (camera instanceof THREE.PerspectiveCamera) {
+		camera.aspect = clientWidth / clientHeight;
+		camera.updateProjectionMatrix();
+		return;
+	}
+	if (camera instanceof THREE.OrthographicCamera) {
+		const aspect = clientWidth / clientHeight;
+		const frustumHeight = camera.top - camera.bottom;
+		camera.left = (-frustumHeight * aspect) / 2;
+		camera.right = (frustumHeight * aspect) / 2;
+		camera.updateProjectionMatrix();
+	}
 }
 
 export function makeGrid(

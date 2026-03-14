@@ -52,7 +52,7 @@ function useCadGeometry(modelUrl: string, fallback: THREE.BufferGeometry) {
     status: modelUrl ? "loading" : "fallback",
     message: modelUrl
       ? "Loading OBJ model..."
-      : "Using fallback box from model_bounds.",
+      : "Using fallback box from size.",
   });
 
   useEffect(() => {
@@ -63,7 +63,7 @@ function useCadGeometry(modelUrl: string, fallback: THREE.BufferGeometry) {
       setState({
         geometry: fallbackClone,
         status: "fallback",
-        message: "Using fallback box from model_bounds.",
+        message: "Using fallback box from size.",
       });
       return () => {
         fallbackClone.dispose();
@@ -105,8 +105,8 @@ function useCadGeometry(modelUrl: string, fallback: THREE.BufferGeometry) {
           status: "fallback",
           message:
             error instanceof Error
-              ? `${error.message}. Falling back to model_bounds box.`
-              : "Failed to load OBJ. Falling back to model_bounds box.",
+              ? `${error.message}. Falling back to size box.`
+              : "Failed to load OBJ. Falling back to size box.",
         });
       });
 
@@ -135,6 +135,12 @@ function SceneCanvas({
   ) => { hoverTargets?: HoverTarget[]; overlayObjects?: THREE.Object3D[] } | void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [projection, setProjection] = useState<"perspective" | "orthographic">(
+    "perspective",
+  );
+  const [viewPreset, setViewPreset] = useState<
+    "side" | "front" | "top" | "corner"
+  >("corner");
   const [hovered, setHovered] = useState<{
     x: number;
     y: number;
@@ -149,7 +155,44 @@ function SceneCanvas({
 
     const renderer = createRenderer(canvas);
     renderer.autoClear = false;
-    const camera = createCamera(up);
+    const createActiveCamera = () => {
+      const direction = (() => {
+        switch (viewPreset) {
+          case "top":
+            return up.clone().normalize();
+          case "front":
+            return new THREE.Vector3(0, 1, 0);
+          case "side":
+            return new THREE.Vector3(1, 0, 0);
+          case "corner":
+          default:
+            return new THREE.Vector3(1, 1, 1).normalize();
+        }
+      })();
+      const distance = 90;
+
+      if (projection === "orthographic") {
+        const aspect = Math.max(canvas.clientWidth / Math.max(canvas.clientHeight, 1), 1);
+        const frustum = 40;
+        const camera = new THREE.OrthographicCamera(
+          -frustum * aspect,
+          frustum * aspect,
+          frustum,
+          -frustum,
+          0.1,
+          1000,
+        );
+        camera.up.copy(up);
+        camera.position.copy(direction.multiplyScalar(distance));
+        return camera;
+      }
+
+      const camera = createCamera(up);
+      camera.position.copy(direction.multiplyScalar(distance));
+      return camera;
+    };
+
+    const camera = createActiveCamera();
     const controls = createControls(camera, canvas);
     const scene = new THREE.Scene();
     const overlayScene = new THREE.Scene();
@@ -261,7 +304,7 @@ function SceneCanvas({
         }
       });
     };
-  }, [buildScene, up]);
+  }, [buildScene, projection, up, viewPreset]);
 
   return (
     <section className="viewport">
@@ -269,6 +312,30 @@ function SceneCanvas({
         <div>
           <h2>{title}</h2>
           <p>{subtitle}</p>
+        </div>
+        <div className="viewport-actions">
+          <button type="button" onClick={() => setViewPreset("side")}>
+            Side
+          </button>
+          <button type="button" onClick={() => setViewPreset("front")}>
+            Front
+          </button>
+          <button type="button" onClick={() => setViewPreset("top")}>
+            Top
+          </button>
+          <button type="button" onClick={() => setViewPreset("corner")}>
+            Corner
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setProjection((current) =>
+                current === "perspective" ? "orthographic" : "perspective",
+              )
+            }
+          >
+            {projection === "perspective" ? "Orthographic" : "Perspective"}
+          </button>
         </div>
       </header>
       <div className="viewport-body">
@@ -313,11 +380,13 @@ function NumberField({
 }
 
 function Vector3Field({
+  title,
   labels,
   values,
   step = 0.1,
   onChange,
 }: {
+  title: string;
   labels: [string, string, string];
   values: [number, number, number];
   step?: number;
@@ -325,7 +394,9 @@ function Vector3Field({
 }) {
   const axes: Array<"x" | "y" | "z"> = ["x", "y", "z"];
   return (
-    <div className="vector3-field">
+    <div className="vector3-block">
+      <div className="vector3-title">{title}</div>
+      <div className="vector3-field">
       {labels.map((label) => (
         <span key={label} className="vector3-label">
           {label}
@@ -342,6 +413,7 @@ function Vector3Field({
           }
         />
       ))}
+      </div>
     </div>
   );
 }
@@ -373,18 +445,15 @@ function SelectField<T extends string>({
 
 function Section({
   title,
-  hint,
   children,
 }: {
   title: string;
-  hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <section className="editor-card">
       <div className="editor-card-header">
         <h2>{title}</h2>
-        {hint ? <p>{hint}</p> : null}
       </div>
       <div className="editor-grid">{children}</div>
     </section>
@@ -393,6 +462,7 @@ function Section({
 
 function App() {
   const [cad, setCad] = useState(() => normalizeCadComponent(SAMPLE_CAD_COMPONENT));
+  const [boardThickness, setBoardThickness] = useState(1.6);
   const [importText, setImportText] = useState(() =>
     JSON.stringify(SAMPLE_CAD_COMPONENT, null, 2),
   );
@@ -431,14 +501,14 @@ function App() {
     }));
   };
 
-  const updateBounds = (
-    axis: "width" | "height" | "depth",
+  const updateSize = (
+    axis: "x" | "y" | "z",
     value: number,
   ) => {
     setCad((current) => ({
       ...current,
-      model_bounds: {
-        ...current.model_bounds,
+      size: {
+        ...current.size,
         [axis]: value,
       },
     }));
@@ -506,7 +576,7 @@ function App() {
     () => (scene: THREE.Scene) => {
       addDefaultLights(scene);
       scene.add(makeGrid(90, 36, "z+"));
-      scene.add(makeBoard(cad.board_thickness));
+      scene.add(makeBoard(boardThickness));
 
       const placed = new THREE.Group();
       placed.rotation.copy(placement.rotation);
@@ -546,7 +616,7 @@ function App() {
     },
     [
       cad.anchor_alignment,
-      cad.board_thickness,
+      boardThickness,
       cad.position.x,
       cad.position.y,
       cad.position.z,
@@ -580,10 +650,7 @@ function App() {
           </button>
         </div>
 
-        <Section
-          title="cad_component"
-          hint="Edit the exact property names used by the cad_component payload."
-        >
+        <Section title="cad_component">
           <SelectField<AxisDirection>
             label="model_board_normal_direction"
             value={cad.model_board_normal_direction}
@@ -602,20 +669,12 @@ function App() {
             options={ALIGNMENT_OPTIONS}
             onChange={(value) => update("anchor_alignment", value)}
           />
-          <NumberField
-            label="board_thickness"
-            value={cad.board_thickness}
-            onChange={(value) => update("board_thickness", value)}
-          />
         </Section>
 
         <Section title="model_origin_position">
           <Vector3Field
-            labels={[
-              "model_origin_position.x",
-              "model_origin_position.y",
-              "model_origin_position.z",
-            ]}
+            title="model_origin_position"
+            labels={["x", "y", "z"]}
             values={[
               cad.model_origin_position.x,
               cad.model_origin_position.y,
@@ -625,18 +684,22 @@ function App() {
           />
         </Section>
 
-        <Section title="position">
+        <Section title="position and size">
           <Vector3Field
-            labels={["position.x", "position.y", "position.z"]}
+            title="position"
+            labels={["x", "y", "z"]}
             values={[cad.position.x, cad.position.y, cad.position.z]}
             onChange={(axis, value) => updateVec3("position", axis, value)}
           />
+          <Vector3Field
+            title="size"
+            labels={["x", "y", "z"]}
+            values={[cad.size.x, cad.size.y, cad.size.z]}
+            onChange={(axis, value) => updateSize(axis, value)}
+          />
         </Section>
 
-        <Section
-          title="model_obj_url and model_bounds"
-          hint="The exact model_obj_url string and model_bounds fields."
-        >
+        <Section title="model_obj_url">
           <label className="control-stack">
             <span>model_obj_url</span>
             <input
@@ -645,21 +708,6 @@ function App() {
               onChange={(event) => update("model_obj_url", event.target.value)}
             />
           </label>
-          <NumberField
-            label="model_bounds.width"
-            value={cad.model_bounds.width}
-            onChange={(value) => updateBounds("width", value)}
-          />
-          <NumberField
-            label="model_bounds.height"
-            value={cad.model_bounds.height}
-            onChange={(value) => updateBounds("height", value)}
-          />
-          <NumberField
-            label="model_bounds.depth"
-            value={cad.model_bounds.depth}
-            onChange={(value) => updateBounds("depth", value)}
-          />
         </Section>
 
         <section className="info-card">
@@ -687,6 +735,17 @@ function App() {
             </div>
           </dl>
         </section>
+
+        <details className="json-panel">
+          <summary>board properties</summary>
+          <div className="editor-grid details-grid">
+            <NumberField
+              label="board_thickness"
+              value={boardThickness}
+              onChange={setBoardThickness}
+            />
+          </div>
+        </details>
 
         <details className="json-panel">
           <summary>Circuit JSON</summary>

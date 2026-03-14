@@ -8,18 +8,17 @@ export interface Vec3Input {
 	z: number;
 }
 
-export interface ModelBoundsInput {
-	width: number;
-	height: number;
-	depth: number;
+export interface SizeInput {
+	x: number;
+	y: number;
+	z: number;
 }
 
 export interface CadComponentInput {
 	name?: string;
 	description?: string;
 	model_obj_url?: string;
-	model_bounds?: ModelBoundsInput;
-	board_thickness?: number;
+	size?: SizeInput;
 	model_board_normal_direction?: AxisDirection;
 	model_origin_alignment?: Alignment;
 	model_origin_position?: Vec3Input;
