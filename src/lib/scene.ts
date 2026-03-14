@@ -226,18 +226,14 @@ export function makeBoard(boardThickness: number) {
 export function makeOriginMarker(position: THREE.Vector3, color: number) {
 	const group = new THREE.Group();
 	const sphere = new THREE.Mesh(
-		new THREE.SphereGeometry(0.95, 24, 24),
-		new THREE.MeshStandardMaterial({
-			color,
-			emissive: color,
-			emissiveIntensity: 0.35,
-		}),
+		new THREE.SphereGeometry(0.48, 24, 24),
+		new THREE.MeshBasicMaterial({ color }),
 	);
 	sphere.position.copy(position);
 	group.add(sphere);
 
 	const ring = new THREE.Mesh(
-		new THREE.TorusGeometry(1.65, 0.14, 16, 40),
+		new THREE.TorusGeometry(0.82, 0.08, 16, 40),
 		new THREE.MeshBasicMaterial({ color }),
 	);
 	ring.position.copy(position);

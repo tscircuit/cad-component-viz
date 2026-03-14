@@ -130,7 +130,9 @@ function SceneCanvas({
   title: string;
   subtitle: string;
   up: THREE.Vector3;
-  buildScene: (scene: THREE.Scene) => { hoverTargets?: HoverTarget[] } | void;
+  buildScene: (
+    scene: THREE.Scene,
+  ) => { hoverTargets?: HoverTarget[]; overlayObjects?: THREE.Object3D[] } | void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hovered, setHovered] = useState<{
@@ -146,11 +148,16 @@ function SceneCanvas({
     }
 
     const renderer = createRenderer(canvas);
+    renderer.autoClear = false;
     const camera = createCamera(up);
     const controls = createControls(camera, canvas);
     const scene = new THREE.Scene();
+    const overlayScene = new THREE.Scene();
     const buildResult = buildScene(scene);
     const hoverTargets = buildResult?.hoverTargets ?? [];
+    for (const object of buildResult?.overlayObjects ?? []) {
+      overlayScene.add(object);
+    }
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
 
@@ -212,7 +219,10 @@ function SceneCanvas({
     const render = () => {
       animationFrame = window.requestAnimationFrame(render);
       controls.update();
+      renderer.clear();
       renderer.render(scene, camera);
+      renderer.clearDepth();
+      renderer.render(overlayScene, camera);
     };
     render();
 
@@ -227,6 +237,18 @@ function SceneCanvas({
       controls.dispose();
       renderer.dispose();
       scene.traverse((object: THREE.Object3D) => {
+        if (object instanceof THREE.Mesh) {
+          object.geometry.dispose();
+          if (Array.isArray(object.material)) {
+            for (const material of object.material) {
+              material.dispose();
+            }
+          } else {
+            object.material.dispose();
+          }
+        }
+      });
+      overlayScene.traverse((object: THREE.Object3D) => {
         if (object instanceof THREE.Mesh) {
           object.geometry.dispose();
           if (Array.isArray(object.material)) {
@@ -287,6 +309,40 @@ function NumberField({
         onChange={(event) => onChange(Number(event.target.value))}
       />
     </label>
+  );
+}
+
+function Vector3Field({
+  labels,
+  values,
+  step = 0.1,
+  onChange,
+}: {
+  labels: [string, string, string];
+  values: [number, number, number];
+  step?: number;
+  onChange: (axis: "x" | "y" | "z", value: number) => void;
+}) {
+  const axes: Array<"x" | "y" | "z"> = ["x", "y", "z"];
+  return (
+    <div className="vector3-field">
+      {labels.map((label) => (
+        <span key={label} className="vector3-label">
+          {label}
+        </span>
+      ))}
+      {values.map((value, index) => (
+        <input
+          key={axes[index] ?? index}
+          type="number"
+          value={value}
+          step={step}
+          onChange={(event) =>
+            onChange(axes[index] ?? "x", Number(event.target.value))
+          }
+        />
+      ))}
+    </div>
   );
 }
 
@@ -426,7 +482,6 @@ function App() {
         `Model Origin ${formatVec3(placement.modelOrigin)}`,
         `Model Origin Alignment: ${cad.model_origin_alignment}`,
       ]);
-      scene.add(modelOriginMarker.group);
       scene.add(
         makeBoardNormalArrow(
           placement.modelOrigin,
@@ -435,6 +490,7 @@ function App() {
       );
       return {
         hoverTargets: [modelOriginMarker.target],
+        overlayObjects: [modelOriginMarker.group],
       };
     },
     [
@@ -477,7 +533,6 @@ function App() {
         `Cad Component Position ${formatVec3(boardPosition)}`,
         `Anchor Alignment: ${cad.anchor_alignment}`,
       ]);
-      scene.add(boardPositionMarker.group);
 
       const placedBounds = geometryBounds.boundingBox
         .clone()
@@ -486,6 +541,7 @@ function App() {
       scene.add(makeAxisBadges(placedBounds));
       return {
         hoverTargets: [boardPositionMarker.target],
+        overlayObjects: [boardPositionMarker.group],
       };
     },
     [
@@ -553,45 +609,27 @@ function App() {
           />
         </Section>
 
-        <Section
-          title="model_origin_position"
-          hint="The exact model_origin_position vector."
-        >
-          <NumberField
-            label="model_origin_position.x"
-            value={cad.model_origin_position.x}
-            onChange={(value) => updateVec3("model_origin_position", "x", value)}
-          />
-          <NumberField
-            label="model_origin_position.y"
-            value={cad.model_origin_position.y}
-            onChange={(value) => updateVec3("model_origin_position", "y", value)}
-          />
-          <NumberField
-            label="model_origin_position.z"
-            value={cad.model_origin_position.z}
-            onChange={(value) => updateVec3("model_origin_position", "z", value)}
+        <Section title="model_origin_position">
+          <Vector3Field
+            labels={[
+              "model_origin_position.x",
+              "model_origin_position.y",
+              "model_origin_position.z",
+            ]}
+            values={[
+              cad.model_origin_position.x,
+              cad.model_origin_position.y,
+              cad.model_origin_position.z,
+            ]}
+            onChange={(axis, value) => updateVec3("model_origin_position", axis, value)}
           />
         </Section>
 
-        <Section
-          title="position"
-          hint="The exact position vector."
-        >
-          <NumberField
-            label="position.x"
-            value={cad.position.x}
-            onChange={(value) => updateVec3("position", "x", value)}
-          />
-          <NumberField
-            label="position.y"
-            value={cad.position.y}
-            onChange={(value) => updateVec3("position", "y", value)}
-          />
-          <NumberField
-            label="position.z"
-            value={cad.position.z}
-            onChange={(value) => updateVec3("position", "z", value)}
+        <Section title="position">
+          <Vector3Field
+            labels={["position.x", "position.y", "position.z"]}
+            values={[cad.position.x, cad.position.y, cad.position.z]}
+            onChange={(axis, value) => updateVec3("position", axis, value)}
           />
         </Section>
 

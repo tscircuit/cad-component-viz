@@ -139,6 +139,17 @@ select {
   gap: 3px;
 }
 
+.vector3-field {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 6px;
+}
+
+.vector3-label {
+  color: #374151;
+  font-size: 10px;
+}
+
 .control-row span,
 .control-stack span,
 .field {
@@ -157,6 +168,7 @@ select {
 .control-row input,
 .control-row select,
 .control-stack input,
+.vector3-field input,
 .field textarea {
   width: 100%;
   min-height: 24rem;
@@ -171,7 +183,8 @@ select {
 
 .control-row input,
 .control-row select,
-.control-stack input {
+.control-stack input,
+.vector3-field input {
   min-height: 0;
   padding: 4px 6px;
   height: 28px;
