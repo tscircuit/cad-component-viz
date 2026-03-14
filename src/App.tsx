@@ -5,7 +5,6 @@ import {
   NORMAL_OPTIONS,
   buildFallbackGeometry,
   computePlacement,
-  describeRotation,
   directionToVector,
   getGeometryBounds,
   normalizeCadComponent,
@@ -637,28 +636,7 @@ function App() {
 
         <div className={`status-pill ${statusClass}`}>{message}</div>
 
-        <Section title="cad_component">
-          <SelectField<AxisDirection>
-            label="model_board_normal_direction"
-            value={cad.model_board_normal_direction}
-            options={NORMAL_OPTIONS}
-            onChange={(value) => update("model_board_normal_direction", value)}
-          />
-          <SelectField<Alignment>
-            label="model_origin_alignment"
-            value={cad.model_origin_alignment}
-            options={ALIGNMENT_OPTIONS}
-            onChange={(value) => update("model_origin_alignment", value)}
-          />
-          <SelectField<Alignment>
-            label="anchor_alignment"
-            value={cad.anchor_alignment}
-            options={ALIGNMENT_OPTIONS}
-            onChange={(value) => update("anchor_alignment", value)}
-          />
-        </Section>
-
-        <Section title="model_origin_position">
+        <Section title="component model">
           <Vector3Field
             title="model_origin_position"
             labels={["x", "y", "z"]}
@@ -669,9 +647,21 @@ function App() {
             ]}
             onChange={(axis, value) => updateVec3("model_origin_position", axis, value)}
           />
+          <SelectField<Alignment>
+            label="model_origin_alignment"
+            value={cad.model_origin_alignment}
+            options={ALIGNMENT_OPTIONS}
+            onChange={(value) => update("model_origin_alignment", value)}
+          />
+          <SelectField<AxisDirection>
+            label="model_board_normal_direction"
+            value={cad.model_board_normal_direction}
+            options={NORMAL_OPTIONS}
+            onChange={(value) => update("model_board_normal_direction", value)}
+          />
         </Section>
 
-        <Section title="position and size">
+        <Section title="component">
           <Vector3Field
             title="position"
             labels={["x", "y", "z"]}
@@ -683,6 +673,12 @@ function App() {
             labels={["x", "y", "z"]}
             values={[cad.size.x, cad.size.y, cad.size.z]}
             onChange={(axis, value) => updateSize(axis, value)}
+          />
+          <SelectField<Alignment>
+            label="anchor_alignment"
+            value={cad.anchor_alignment}
+            options={ALIGNMENT_OPTIONS}
+            onChange={(value) => update("anchor_alignment", value)}
           />
         </Section>
 
@@ -696,32 +692,6 @@ function App() {
             />
           </label>
         </Section>
-
-        <section className="info-card">
-          <h2>Interpretation</h2>
-          <dl>
-            <div>
-              <dt>Rotate to board z+</dt>
-              <dd>{describeRotation(cad.model_board_normal_direction)}</dd>
-            </div>
-            <div>
-              <dt>Rotated origin</dt>
-              <dd>
-                ({placement.rotatedOrigin.x.toFixed(2)},{" "}
-                {placement.rotatedOrigin.y.toFixed(2)},{" "}
-                {placement.rotatedOrigin.z.toFixed(2)})
-              </dd>
-            </div>
-            <div>
-              <dt>Translation</dt>
-              <dd>
-                ({placement.translation.x.toFixed(2)},{" "}
-                {placement.translation.y.toFixed(2)},{" "}
-                {placement.translation.z.toFixed(2)})
-              </dd>
-            </div>
-          </dl>
-        </section>
 
         <details className="json-panel">
           <summary>board properties</summary>
