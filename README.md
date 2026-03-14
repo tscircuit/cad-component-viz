@@ -1,23 +1,8 @@
 # cad-component-viz
 
-React/Vite viewer for inspecting Circuit JSON `cad_component` placement and board-normal behavior.
+React/Vite viewer for inspecting tscircuit cadModel and [Circuit JSON](https://github.com/tscircuit/circuit-json) `cad_component` placement.
 
-## Run
+This is most useful when trying to debug the correct loading of models into tscircuit to get them correctly placed on a board.
 
-```bash
-bun install
-bun run dev
-```
 
-## Build
-
-```bash
-bun run build
-```
-
-## What it does
-
-- Paste a `cad_component` JSON payload into the editor.
-- View the raw model in model space, with its declared board normal shown explicitly.
-- View the transformed placement in board space, where board-up is always `z+`.
-- Fall back to a simple box from `model_bounds` when an OBJ URL is missing or unavailable.
+![viz](https://private-user-images.githubusercontent.com/1910070/563606458-35693bce-6e92-4633-933a-d039dbb6e4b6.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NzM1MTU1MDEsIm5iZiI6MTc3MzUxNTIwMSwicGF0aCI6Ii8xOTEwMDcwLzU2MzYwNjQ1OC0zNTY5M2JjZS02ZTkyLTQ2MzMtOTMzYS1kMDM5ZGJiNmU0YjYucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MDMxNCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAzMTRUMTkwNjQxWiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9ZWY4N2MwOWFiMjMxZTM0ZTBlNDA4YmU2ZjIwY2JkYmYyNGNlMTY3Mzc3MjU2MjgyNmFmNGI3NWEyYTAxNmFiMyZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.UxPGoaIoR89mFZgJhy8e1DSgZX_rU34BRU8dptLP9SE)
