@@ -153,3 +153,17 @@ export function computePlacement(input: Required<CadComponentInput>) {
 		translation,
 	};
 }
+
+export function getGeometryBounds(geometry: THREE.BufferGeometry) {
+	if (!geometry.boundingBox) {
+		geometry.computeBoundingBox();
+	}
+	const boundingBox = geometry.boundingBox?.clone() ?? new THREE.Box3();
+	const size = boundingBox.getSize(new THREE.Vector3());
+	const center = boundingBox.getCenter(new THREE.Vector3());
+	return {
+		boundingBox,
+		size,
+		center,
+	};
+}

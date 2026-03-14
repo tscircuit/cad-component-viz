@@ -12,7 +12,7 @@ export const SAMPLE_CAD_COMPONENT: CadComponentInput = {
 		depth: 16.25,
 	},
 	board_thickness: 1.6,
-	model_board_normal_direction: "y+",
+  model_board_normal_direction: "z+",
 	model_origin_alignment: "center_of_component_board_surface",
 	model_origin_position: {
 		x: 0,

@@ -1,395 +1,706 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import {
-	ALIGNMENT_OPTIONS,
-	NORMAL_OPTIONS,
-	buildFallbackGeometry,
-	computePlacement,
-	describeRotation,
-	directionToVector,
-	normalizeCadComponent,
-	parseOBJ,
+  ALIGNMENT_OPTIONS,
+  NORMAL_OPTIONS,
+  buildFallbackGeometry,
+  computePlacement,
+  describeRotation,
+  directionToVector,
+  getGeometryBounds,
+  normalizeCadComponent,
+  parseOBJ,
 } from "./lib/cad";
 import {
-	addDefaultLights,
-	createCamera,
-	createControls,
-	createRenderer,
-	fitRenderer,
-	makeAxes,
-	makeBoard,
-	makeBoardNormalArrow,
-	makeGrid,
-	makeOriginMarker,
+  addDefaultLights,
+  createCamera,
+  createControls,
+  createRenderer,
+  fitRenderer,
+  makeAxisBadges,
+  makeAxesToBadgePositions,
+  makeBoard,
+  makeBoardNormalArrow,
+  makeGrid,
+  makeHoverMarker,
+  type HoverTarget,
 } from "./lib/scene";
 import { SAMPLE_CAD_COMPONENT } from "./sampleCadComponent";
-import type { CadComponentInput } from "./types";
+import type { Alignment, AxisDirection, CadComponentInput } from "./types";
 
 function parseInput(text: string): {
-	value: CadComponentInput | null;
-	error: string | null;
+  value: CadComponentInput | null;
+  error: string | null;
 } {
-	try {
-		return { value: JSON.parse(text) as CadComponentInput, error: null };
-	} catch (error) {
-		return {
-			value: null,
-			error: error instanceof Error ? error.message : "Invalid JSON",
-		};
-	}
+  try {
+    return { value: JSON.parse(text) as CadComponentInput, error: null };
+  } catch (error) {
+    return {
+      value: null,
+      error: error instanceof Error ? error.message : "Invalid JSON",
+    };
+  }
 }
 
 function useCadGeometry(modelUrl: string, fallback: THREE.BufferGeometry) {
-	const [state, setState] = useState<{
-		geometry: THREE.BufferGeometry;
-		status: "idle" | "loading" | "ready" | "fallback";
-		message: string;
-	}>({
-		geometry: fallback,
-		status: modelUrl ? "loading" : "fallback",
-		message: modelUrl
-			? "Loading OBJ model..."
-			: "Using fallback box from model_bounds.",
-	});
+  const [state, setState] = useState<{
+    geometry: THREE.BufferGeometry;
+    status: "idle" | "loading" | "ready" | "fallback";
+    message: string;
+  }>({
+    geometry: fallback,
+    status: modelUrl ? "loading" : "fallback",
+    message: modelUrl
+      ? "Loading OBJ model..."
+      : "Using fallback box from model_bounds.",
+  });
 
-	useEffect(() => {
-		let disposed = false;
-		const fallbackClone = fallback.clone();
+  useEffect(() => {
+    let disposed = false;
+    const fallbackClone = fallback.clone();
 
-		if (!modelUrl) {
-			setState({
-				geometry: fallbackClone,
-				status: "fallback",
-				message: "Using fallback box from model_bounds.",
-			});
-			return () => {
-				fallbackClone.dispose();
-			};
-		}
+    if (!modelUrl) {
+      setState({
+        geometry: fallbackClone,
+        status: "fallback",
+        message: "Using fallback box from model_bounds.",
+      });
+      return () => {
+        fallbackClone.dispose();
+      };
+    }
 
-		setState({
-			geometry: fallbackClone,
-			status: "loading",
-			message: "Loading OBJ model...",
-		});
+    setState({
+      geometry: fallbackClone,
+      status: "loading",
+      message: "Loading OBJ model...",
+    });
 
-		const controller = new AbortController();
-		fetch(modelUrl, { signal: controller.signal })
-			.then(async (response) => {
-				if (!response.ok) {
-					throw new Error(`Failed to fetch OBJ (${response.status})`);
-				}
-				return parseOBJ(await response.text());
-			})
-			.then((geometry) => {
-				if (disposed) {
-					geometry.dispose();
-					return;
-				}
-				setState({
-					geometry,
-					status: "ready",
-					message: "OBJ loaded successfully.",
-				});
-				fallbackClone.dispose();
-			})
-			.catch((error: unknown) => {
-				if (disposed || controller.signal.aborted) {
-					return;
-				}
-				setState({
-					geometry: fallbackClone,
-					status: "fallback",
-					message:
-						error instanceof Error
-							? `${error.message}. Falling back to model_bounds box.`
-							: "Failed to load OBJ. Falling back to model_bounds box.",
-				});
-			});
+    const controller = new AbortController();
+    fetch(modelUrl, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to fetch OBJ (${response.status})`);
+        }
+        return parseOBJ(await response.text());
+      })
+      .then((geometry) => {
+        if (disposed) {
+          geometry.dispose();
+          return;
+        }
+        setState({
+          geometry,
+          status: "ready",
+          message: "OBJ loaded successfully.",
+        });
+        fallbackClone.dispose();
+      })
+      .catch((error: unknown) => {
+        if (disposed || controller.signal.aborted) {
+          return;
+        }
+        setState({
+          geometry: fallbackClone,
+          status: "fallback",
+          message:
+            error instanceof Error
+              ? `${error.message}. Falling back to model_bounds box.`
+              : "Failed to load OBJ. Falling back to model_bounds box.",
+        });
+      });
 
-		return () => {
-			disposed = true;
-			controller.abort();
-		};
-	}, [fallback, modelUrl]);
+    return () => {
+      disposed = true;
+      controller.abort();
+    };
+  }, [fallback, modelUrl]);
 
-	useEffect(() => () => state.geometry.dispose(), [state.geometry]);
+  useEffect(() => () => state.geometry.dispose(), [state.geometry]);
 
-	return state;
+  return state;
 }
 
 function SceneCanvas({
-	title,
-	subtitle,
-	up,
-	buildScene,
+  title,
+  subtitle,
+  up,
+  buildScene,
 }: {
-	title: string;
-	subtitle: string;
-	up: THREE.Vector3;
-	buildScene: (scene: THREE.Scene) => void;
+  title: string;
+  subtitle: string;
+  up: THREE.Vector3;
+  buildScene: (scene: THREE.Scene) => { hoverTargets?: HoverTarget[] } | void;
 }) {
-	const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [hovered, setHovered] = useState<{
+    x: number;
+    y: number;
+    lines: string[];
+  } | null>(null);
 
-	useEffect(() => {
-		const canvas = canvasRef.current;
-		if (!canvas) {
-			return;
-		}
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
 
-		const renderer = createRenderer(canvas);
-		const camera = createCamera(up);
-		const controls = createControls(camera, canvas);
-		const scene = new THREE.Scene();
-		buildScene(scene);
+    const renderer = createRenderer(canvas);
+    const camera = createCamera(up);
+    const controls = createControls(camera, canvas);
+    const scene = new THREE.Scene();
+    const buildResult = buildScene(scene);
+    const hoverTargets = buildResult?.hoverTargets ?? [];
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
 
-		const resize = () => fitRenderer(renderer, camera, canvas);
-		resize();
+    const resize = () => fitRenderer(renderer, camera, canvas);
+    resize();
 
-		let animationFrame = 0;
-		const render = () => {
-			animationFrame = window.requestAnimationFrame(render);
-			controls.update();
-			renderer.render(scene, camera);
-		};
-		render();
+    const updateHover = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const intersections = raycaster.intersectObjects(
+        hoverTargets.map((target) => target.object),
+        true,
+      );
 
-		const observer = new ResizeObserver(resize);
-		observer.observe(canvas);
+      if (intersections.length === 0) {
+        setHovered(null);
+        canvas.style.cursor = "default";
+        return;
+      }
 
-		return () => {
-			window.cancelAnimationFrame(animationFrame);
-			observer.disconnect();
-			controls.dispose();
-			renderer.dispose();
-			scene.traverse((object: THREE.Object3D) => {
-				if (object instanceof THREE.Mesh) {
-					object.geometry.dispose();
-					if (Array.isArray(object.material)) {
-						for (const material of object.material) {
-							material.dispose();
-						}
-					} else {
-						object.material.dispose();
-					}
-				}
-			});
-		};
-	}, [buildScene, up]);
+      const hit = hoverTargets.find((target) =>
+        intersections.some(
+          (intersection) =>
+            intersection.object === target.object ||
+            target.object.children.includes(intersection.object),
+        ),
+      );
 
-	return (
-		<section className="viewport">
-			<header className="viewport-header">
-				<div>
-					<h2>{title}</h2>
-					<p>{subtitle}</p>
-				</div>
-			</header>
-			<canvas ref={canvasRef} />
-		</section>
-	);
+      if (!hit) {
+        setHovered(null);
+        canvas.style.cursor = "default";
+        return;
+      }
+
+      const projected = hit.position.clone().project(camera);
+      setHovered({
+        x: ((projected.x + 1) / 2) * rect.width,
+        y: ((-projected.y + 1) / 2) * rect.height - 12,
+        lines: hit.lines,
+      });
+      canvas.style.cursor = "pointer";
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      updateHover(event.clientX, event.clientY);
+    };
+
+    const onPointerLeave = () => {
+      setHovered(null);
+      canvas.style.cursor = "default";
+    };
+
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerleave", onPointerLeave);
+
+    let animationFrame = 0;
+    const render = () => {
+      animationFrame = window.requestAnimationFrame(render);
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    render();
+
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer.disconnect();
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerleave", onPointerLeave);
+      controls.dispose();
+      renderer.dispose();
+      scene.traverse((object: THREE.Object3D) => {
+        if (object instanceof THREE.Mesh) {
+          object.geometry.dispose();
+          if (Array.isArray(object.material)) {
+            for (const material of object.material) {
+              material.dispose();
+            }
+          } else {
+            object.material.dispose();
+          }
+        }
+      });
+    };
+  }, [buildScene, up]);
+
+  return (
+    <section className="viewport">
+      <header className="viewport-header">
+        <div>
+          <h2>{title}</h2>
+          <p>{subtitle}</p>
+        </div>
+      </header>
+      <div className="viewport-body">
+        <canvas ref={canvasRef} />
+        {hovered ? (
+          <div
+            className="hover-label"
+            style={{ left: hovered.x, top: hovered.y }}
+          >
+            {hovered.lines.map((line) => (
+              <div key={line}>{line}</div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  step = 0.1,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  step?: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="control-row">
+      <span>{label}</span>
+      <input
+        type="number"
+        value={value}
+        step={step}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
+  );
+}
+
+function SelectField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: readonly T[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <label className="control-row">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value as T)}>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function Section({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="editor-card">
+      <div className="editor-card-header">
+        <h2>{title}</h2>
+        {hint ? <p>{hint}</p> : null}
+      </div>
+      <div className="editor-grid">{children}</div>
+    </section>
+  );
 }
 
 function App() {
-	const [editorValue, setEditorValue] = useState(() =>
-		JSON.stringify(SAMPLE_CAD_COMPONENT, null, 2),
-	);
+  const [cad, setCad] = useState(() => normalizeCadComponent(SAMPLE_CAD_COMPONENT));
+  const [importText, setImportText] = useState(() =>
+    JSON.stringify(SAMPLE_CAD_COMPONENT, null, 2),
+  );
+  const [importError, setImportError] = useState<string | null>(null);
 
-	const parsed = useMemo(() => parseInput(editorValue), [editorValue]);
-	const cad = useMemo(
-		() => normalizeCadComponent(parsed.value ?? SAMPLE_CAD_COMPONENT),
-		[parsed.value],
-	);
-	const fallbackGeometry = useMemo(() => buildFallbackGeometry(cad), [cad]);
-	const { geometry, status, message } = useCadGeometry(
-		cad.model_obj_url,
-		fallbackGeometry,
-	);
-	const placement = useMemo(() => computePlacement(cad), [cad]);
-	const modelUp = useMemo(
-		() => directionToVector(cad.model_board_normal_direction),
-		[cad.model_board_normal_direction],
-	);
+  const fallbackGeometry = useMemo(() => buildFallbackGeometry(cad), [cad]);
+  const { geometry, status, message } = useCadGeometry(
+    cad.model_obj_url,
+    fallbackGeometry,
+  );
+  const placement = useMemo(() => computePlacement(cad), [cad]);
+  const geometryBounds = useMemo(() => getGeometryBounds(geometry), [geometry]);
+  const modelUp = useMemo(
+    () => directionToVector(cad.model_board_normal_direction),
+    [cad.model_board_normal_direction],
+  );
+  const generatedJson = useMemo(() => JSON.stringify(cad, null, 2), [cad]);
+  const formatVec3 = (vector: THREE.Vector3) =>
+    `(${vector.x.toFixed(2)}, ${vector.y.toFixed(2)}, ${vector.z.toFixed(2)})`;
 
-	const modelScene = useMemo(
-		() => (scene: THREE.Scene) => {
-			addDefaultLights(scene);
-			scene.add(makeGrid(90, 36, cad.model_board_normal_direction));
-			scene.add(makeAxes(22));
-			scene.add(
-				new THREE.Mesh(
-					geometry.clone(),
-					new THREE.MeshPhongMaterial({
-						color: 0x79a8ff,
-						transparent: true,
-						opacity: 0.84,
-						side: THREE.DoubleSide,
-					}),
-				),
-			);
-			scene.add(makeOriginMarker(placement.modelOrigin, 0xff8a4d));
-			scene.add(
-				makeBoardNormalArrow(
-					placement.modelOrigin,
-					cad.model_board_normal_direction,
-				),
-			);
-		},
-		[cad.model_board_normal_direction, geometry, placement.modelOrigin],
-	);
+  const update = <K extends keyof typeof cad>(key: K, value: (typeof cad)[K]) => {
+    setCad((current) => ({ ...current, [key]: value }));
+  };
 
-	const boardScene = useMemo(
-		() => (scene: THREE.Scene) => {
-			addDefaultLights(scene);
-			scene.add(makeGrid(90, 36, "z+"));
-			scene.add(makeAxes(24));
-			scene.add(makeBoard(cad.board_thickness));
+  const updateVec3 = (
+    key: "model_origin_position" | "position",
+    axis: "x" | "y" | "z",
+    value: number,
+  ) => {
+    setCad((current) => ({
+      ...current,
+      [key]: {
+        ...current[key],
+        [axis]: value,
+      },
+    }));
+  };
 
-			const placed = new THREE.Group();
-			placed.rotation.copy(placement.rotation);
-			placed.position.copy(placement.translation);
-			placed.add(
-				new THREE.Mesh(
-					geometry.clone(),
-					new THREE.MeshPhongMaterial({
-						color: 0x7dd3a7,
-						transparent: true,
-						opacity: 0.84,
-						side: THREE.DoubleSide,
-					}),
-				),
-			);
-			scene.add(placed);
-			scene.add(
-				makeOriginMarker(
-					new THREE.Vector3(cad.position.x, cad.position.y, cad.position.z),
-					0x57f287,
-				),
-			);
-		},
-		[
-			cad.board_thickness,
-			cad.position.x,
-			cad.position.y,
-			cad.position.z,
-			geometry,
-			placement.rotation,
-			placement.translation,
-		],
-	);
+  const updateBounds = (
+    axis: "width" | "height" | "depth",
+    value: number,
+  ) => {
+    setCad((current) => ({
+      ...current,
+      model_bounds: {
+        ...current.model_bounds,
+        [axis]: value,
+      },
+    }));
+  };
 
-	const statusClass =
-		status === "ready" ? "ok" : status === "loading" ? "loading" : "warning";
+  const importJson = () => {
+    const parsed = parseInput(importText);
+    if (!parsed.value) {
+      setImportError(parsed.error ?? "Invalid JSON");
+      return;
+    }
+    setCad(normalizeCadComponent(parsed.value));
+    setImportError(null);
+  };
 
-	return (
-		<main className="app-shell">
-			<aside className="sidebar">
-				<div className="hero">
-					<p className="eyebrow">Circuit JSON</p>
-					<h1>`cad_component` visualizer</h1>
-					<p className="lede">
-						Paste a `cad_component` payload and compare model-space orientation
-						against board-space placement.
-					</p>
-				</div>
+  const resetSample = () => {
+    const sample = normalizeCadComponent(SAMPLE_CAD_COMPONENT);
+    setCad(sample);
+    setImportText(JSON.stringify(sample, null, 2));
+    setImportError(null);
+  };
 
-				<div className={`status-pill ${statusClass}`}>{message}</div>
-				{parsed.error ? (
-					<div className="status-pill error">
-						JSON parse error: {parsed.error}
-					</div>
-				) : null}
+  const modelScene = useMemo(
+    () => (scene: THREE.Scene) => {
+      addDefaultLights(scene);
+      scene.add(makeGrid(90, 36, cad.model_board_normal_direction));
+      scene.add(makeAxesToBadgePositions(geometryBounds.boundingBox));
+      scene.add(
+        new THREE.Mesh(
+          geometry.clone(),
+          new THREE.MeshPhongMaterial({
+            color: 0x79a8ff,
+            transparent: true,
+            opacity: 0.84,
+            side: THREE.DoubleSide,
+          }),
+        ),
+      );
+      scene.add(makeAxisBadges(geometryBounds.boundingBox));
+      const modelOriginMarker = makeHoverMarker(placement.modelOrigin, [
+        `Model Origin ${formatVec3(placement.modelOrigin)}`,
+        `Model Origin Alignment: ${cad.model_origin_alignment}`,
+      ]);
+      scene.add(modelOriginMarker.group);
+      scene.add(
+        makeBoardNormalArrow(
+          placement.modelOrigin,
+          cad.model_board_normal_direction,
+        ),
+      );
+      return {
+        hoverTargets: [modelOriginMarker.target],
+      };
+    },
+    [
+      cad.model_board_normal_direction,
+      cad.model_origin_alignment,
+      geometry,
+      geometryBounds.boundingBox,
+      placement.modelOrigin,
+    ],
+  );
 
-				<div className="actions">
-					<button
-						type="button"
-						onClick={() =>
-							setEditorValue(JSON.stringify(SAMPLE_CAD_COMPONENT, null, 2))
-						}
-					>
-						Reset sample
-					</button>
-				</div>
+  const boardScene = useMemo(
+    () => (scene: THREE.Scene) => {
+      addDefaultLights(scene);
+      scene.add(makeGrid(90, 36, "z+"));
+      scene.add(makeBoard(cad.board_thickness));
 
-				<label className="field">
-					<span>cad_component JSON</span>
-					<textarea
-						value={editorValue}
-						onChange={(event) => setEditorValue(event.target.value)}
-						spellCheck={false}
-					/>
-				</label>
+      const placed = new THREE.Group();
+      placed.rotation.copy(placement.rotation);
+      placed.position.copy(placement.translation);
+      placed.add(
+        new THREE.Mesh(
+          geometry.clone(),
+          new THREE.MeshPhongMaterial({
+            color: 0x7dd3a7,
+            transparent: true,
+            opacity: 0.84,
+            side: THREE.DoubleSide,
+          }),
+        ),
+      );
+      scene.add(placed);
+      placed.updateMatrixWorld(true);
+      const boardPosition = new THREE.Vector3(
+        cad.position.x,
+        cad.position.y,
+        cad.position.z,
+      );
+      const boardPositionMarker = makeHoverMarker(boardPosition, [
+        `Cad Component Position ${formatVec3(boardPosition)}`,
+        `Anchor Alignment: ${cad.anchor_alignment}`,
+      ]);
+      scene.add(boardPositionMarker.group);
 
-				<section className="info-card">
-					<h2>Interpretation</h2>
-					<dl>
-						<div>
-							<dt>Model normal</dt>
-							<dd>{cad.model_board_normal_direction}</dd>
-						</div>
-						<div>
-							<dt>Rotate to board z+</dt>
-							<dd>{describeRotation(cad.model_board_normal_direction)}</dd>
-						</div>
-						<div>
-							<dt>Model origin</dt>
-							<dd>
-								({cad.model_origin_position.x}, {cad.model_origin_position.y},{" "}
-								{cad.model_origin_position.z})
-							</dd>
-						</div>
-						<div>
-							<dt>Rotated origin</dt>
-							<dd>
-								({placement.rotatedOrigin.x.toFixed(2)},{" "}
-								{placement.rotatedOrigin.y.toFixed(2)},{" "}
-								{placement.rotatedOrigin.z.toFixed(2)})
-							</dd>
-						</div>
-						<div>
-							<dt>Translation</dt>
-							<dd>
-								({placement.translation.x.toFixed(2)},{" "}
-								{placement.translation.y.toFixed(2)},{" "}
-								{placement.translation.z.toFixed(2)})
-							</dd>
-						</div>
-					</dl>
-				</section>
+      const placedBounds = geometryBounds.boundingBox
+        .clone()
+        .applyMatrix4(placed.matrixWorld);
+      scene.add(makeAxesToBadgePositions(placedBounds));
+      scene.add(makeAxisBadges(placedBounds));
+      return {
+        hoverTargets: [boardPositionMarker.target],
+      };
+    },
+    [
+      cad.anchor_alignment,
+      cad.board_thickness,
+      cad.position.x,
+      cad.position.y,
+      cad.position.z,
+      geometry,
+      geometryBounds.boundingBox,
+      placement.rotation,
+      placement.translation,
+    ],
+  );
 
-				<section className="info-card">
-					<h2>Current fields</h2>
-					<ul className="chip-list">
-						<li>{cad.model_origin_alignment}</li>
-						<li>{cad.anchor_alignment}</li>
-						<li>board {cad.board_thickness.toFixed(2)} mm</li>
-						<li>{cad.model_obj_url ? "remote OBJ" : "fallback box"}</li>
-					</ul>
-				</section>
+  const statusClass =
+    status === "ready" ? "ok" : status === "loading" ? "loading" : "warning";
 
-				<section className="info-card">
-					<h2>Allowed enum values</h2>
-					<p>{NORMAL_OPTIONS.join(", ")}</p>
-					<p>{ALIGNMENT_OPTIONS.join(", ")}</p>
-				</section>
-			</aside>
+  return (
+    <main className="app-shell">
+      <aside className="sidebar">
+        <div className="hero">
+          <p className="eyebrow">Circuit JSON</p>
+          <h1>`cad_component` visualizer</h1>
+          <p className="lede">
+            Edit the placement fields directly, then inspect how the model-space
+            board normal maps into board-space z+.
+          </p>
+        </div>
 
-			<section className="viewports">
-				<SceneCanvas
-					title="Model space"
-					subtitle={`${cad.model_board_normal_direction} is treated as board-up in the raw model.`}
-					up={modelUp}
-					buildScene={modelScene}
-				/>
-				<SceneCanvas
-					title="Board space"
-					subtitle="The component is rotated into z+ and translated onto the board."
-					up={new THREE.Vector3(0, 0, 1)}
-					buildScene={boardScene}
-				/>
-			</section>
-		</main>
-	);
+        <div className={`status-pill ${statusClass}`}>{message}</div>
+
+        <div className="actions">
+          <button type="button" onClick={resetSample}>
+            Reset sample
+          </button>
+        </div>
+
+        <Section
+          title="cad_component"
+          hint="Edit the exact property names used by the cad_component payload."
+        >
+          <SelectField<AxisDirection>
+            label="model_board_normal_direction"
+            value={cad.model_board_normal_direction}
+            options={NORMAL_OPTIONS}
+            onChange={(value) => update("model_board_normal_direction", value)}
+          />
+          <SelectField<Alignment>
+            label="model_origin_alignment"
+            value={cad.model_origin_alignment}
+            options={ALIGNMENT_OPTIONS}
+            onChange={(value) => update("model_origin_alignment", value)}
+          />
+          <SelectField<Alignment>
+            label="anchor_alignment"
+            value={cad.anchor_alignment}
+            options={ALIGNMENT_OPTIONS}
+            onChange={(value) => update("anchor_alignment", value)}
+          />
+          <NumberField
+            label="board_thickness"
+            value={cad.board_thickness}
+            onChange={(value) => update("board_thickness", value)}
+          />
+        </Section>
+
+        <Section
+          title="model_origin_position"
+          hint="The exact model_origin_position vector."
+        >
+          <NumberField
+            label="model_origin_position.x"
+            value={cad.model_origin_position.x}
+            onChange={(value) => updateVec3("model_origin_position", "x", value)}
+          />
+          <NumberField
+            label="model_origin_position.y"
+            value={cad.model_origin_position.y}
+            onChange={(value) => updateVec3("model_origin_position", "y", value)}
+          />
+          <NumberField
+            label="model_origin_position.z"
+            value={cad.model_origin_position.z}
+            onChange={(value) => updateVec3("model_origin_position", "z", value)}
+          />
+        </Section>
+
+        <Section
+          title="position"
+          hint="The exact position vector."
+        >
+          <NumberField
+            label="position.x"
+            value={cad.position.x}
+            onChange={(value) => updateVec3("position", "x", value)}
+          />
+          <NumberField
+            label="position.y"
+            value={cad.position.y}
+            onChange={(value) => updateVec3("position", "y", value)}
+          />
+          <NumberField
+            label="position.z"
+            value={cad.position.z}
+            onChange={(value) => updateVec3("position", "z", value)}
+          />
+        </Section>
+
+        <Section
+          title="model_obj_url and model_bounds"
+          hint="The exact model_obj_url string and model_bounds fields."
+        >
+          <label className="control-stack">
+            <span>model_obj_url</span>
+            <input
+              type="text"
+              value={cad.model_obj_url}
+              onChange={(event) => update("model_obj_url", event.target.value)}
+            />
+          </label>
+          <NumberField
+            label="model_bounds.width"
+            value={cad.model_bounds.width}
+            onChange={(value) => updateBounds("width", value)}
+          />
+          <NumberField
+            label="model_bounds.height"
+            value={cad.model_bounds.height}
+            onChange={(value) => updateBounds("height", value)}
+          />
+          <NumberField
+            label="model_bounds.depth"
+            value={cad.model_bounds.depth}
+            onChange={(value) => updateBounds("depth", value)}
+          />
+        </Section>
+
+        <section className="info-card">
+          <h2>Interpretation</h2>
+          <dl>
+            <div>
+              <dt>Rotate to board z+</dt>
+              <dd>{describeRotation(cad.model_board_normal_direction)}</dd>
+            </div>
+            <div>
+              <dt>Rotated origin</dt>
+              <dd>
+                ({placement.rotatedOrigin.x.toFixed(2)},{" "}
+                {placement.rotatedOrigin.y.toFixed(2)},{" "}
+                {placement.rotatedOrigin.z.toFixed(2)})
+              </dd>
+            </div>
+            <div>
+              <dt>Translation</dt>
+              <dd>
+                ({placement.translation.x.toFixed(2)},{" "}
+                {placement.translation.y.toFixed(2)},{" "}
+                {placement.translation.z.toFixed(2)})
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        <details className="json-panel">
+          <summary>Circuit JSON</summary>
+          <p className="json-help">
+            Import by pasting JSON and clicking apply. The form controls stay
+            authoritative for editing.
+          </p>
+          <label className="field">
+            <span>Paste JSON</span>
+            <textarea
+              className="import-textarea"
+              value={importText}
+              onChange={(event) => setImportText(event.target.value)}
+              spellCheck={false}
+            />
+          </label>
+          <div className="actions">
+            <button type="button" onClick={importJson}>
+              Apply pasted JSON
+            </button>
+          </div>
+          {importError ? (
+            <div className="status-pill error">JSON parse error: {importError}</div>
+          ) : null}
+          <label className="field">
+            <span>Generated `cad_component`</span>
+            <textarea
+              className="json-output"
+              value={generatedJson}
+              readOnly
+              spellCheck={false}
+            />
+          </label>
+        </details>
+      </aside>
+
+      <section className="viewports">
+        <SceneCanvas
+          title="Model space"
+          subtitle={`${cad.model_board_normal_direction} is treated as board-up in the raw model.`}
+          up={modelUp}
+          buildScene={modelScene}
+        />
+        <SceneCanvas
+          title="Board space"
+          subtitle="The component is rotated into z+ and translated onto the board."
+          up={new THREE.Vector3(0, 0, 1)}
+          buildScene={boardScene}
+        />
+      </section>
+    </main>
+  );
 }
 
 export default App;
