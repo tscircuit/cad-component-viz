@@ -5,6 +5,7 @@
 	"scripts": {
 		"start": "bunx --bun vite",
 		"build": "tsc -b && bunx --bun vite build",
+		"format": "biome format --write .",
 		"preview": "bunx --bun vite preview"
 	},
 	"dependencies": {

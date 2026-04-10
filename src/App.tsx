@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import * as THREE from "three";
+import { useEffect, useMemo, useRef, useState } from "react"
+import * as THREE from "three"
 import {
   ALIGNMENT_OPTIONS,
   NORMAL_OPTIONS,
@@ -11,7 +11,7 @@ import {
   parseModelFromBuffer,
   parseModelFromUnknownBuffer,
   parseModelFromUrl,
-} from "./lib/cad";
+} from "./lib/cad"
 import {
   addDefaultLights,
   createCamera,
@@ -25,84 +25,84 @@ import {
   makeGrid,
   makeHoverMarker,
   type HoverTarget,
-} from "./lib/scene";
-import { SAMPLE_CAD_COMPONENT } from "./sampleCadComponent";
-import type { Alignment, AxisDirection, CadComponentInput } from "./types";
+} from "./lib/scene"
+import { SAMPLE_CAD_COMPONENT } from "./sampleCadComponent"
+import type { Alignment, AxisDirection, CadComponentInput } from "./types"
 
 type ModelSource =
   | { kind: "none" }
   | { kind: "url"; value: string }
-  | { kind: "file"; file: File };
+  | { kind: "file"; file: File }
 
-type AppMode = "landing" | "workspace";
+type AppMode = "landing" | "workspace"
 
 function parseInput(text: string): {
-  value: CadComponentInput | null;
-  error: string | null;
+  value: CadComponentInput | null
+  error: string | null
 } {
   try {
-    return { value: JSON.parse(text) as CadComponentInput, error: null };
+    return { value: JSON.parse(text) as CadComponentInput, error: null }
   } catch (error) {
     return {
       value: null,
       error: error instanceof Error ? error.message : "Invalid JSON",
-    };
+    }
   }
 }
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
-  const [debouncedValue, setDebouncedValue] = useState(value);
+  const [debouncedValue, setDebouncedValue] = useState(value)
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      setDebouncedValue(value);
-    }, delayMs);
+      setDebouncedValue(value)
+    }, delayMs)
     return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [delayMs, value]);
+      window.clearTimeout(timeoutId)
+    }
+  }, [delayMs, value])
 
-  return debouncedValue;
+  return debouncedValue
 }
 
 function getIdleMessage(source: ModelSource): string {
   if (source.kind === "none") {
-    return "Using fallback box from size.";
+    return "Using fallback box from size."
   }
   const format = detectModelFormat(
     source.kind === "file" ? source.file.name : source.value,
-  );
+  )
   if (!format) {
-    return "Loading model and detecting format...";
+    return "Loading model and detecting format..."
   }
-  return `Loading ${format.toUpperCase()} model...`;
+  return `Loading ${format.toUpperCase()} model...`
 }
 
 function useCadGeometry(source: ModelSource) {
   const [state, setState] = useState<{
-    geometry: THREE.BufferGeometry | null;
-    status: "idle" | "loading" | "ready" | "fallback";
-    message: string;
+    geometry: THREE.BufferGeometry | null
+    status: "idle" | "loading" | "ready" | "fallback"
+    message: string
   }>({
     geometry: null,
     status: source.kind === "none" ? "fallback" : "loading",
     message: getIdleMessage(source),
-  });
+  })
 
   useEffect(() => {
-    let disposed = false;
+    let disposed = false
 
     if (source.kind === "none") {
       setState({
         geometry: null,
         status: "fallback",
         message: "Using fallback box from size.",
-      });
-      return;
+      })
+      return
     }
 
-    const sourceName = source.kind === "file" ? source.file.name : source.value;
-    const format = detectModelFormat(sourceName);
+    const sourceName = source.kind === "file" ? source.file.name : source.value
+    const format = detectModelFormat(sourceName)
 
     setState({
       geometry: null,
@@ -110,41 +110,41 @@ function useCadGeometry(source: ModelSource) {
       message: format
         ? `Loading ${format.toUpperCase()} model...`
         : "Loading model and detecting format...",
-    });
+    })
 
-    const controller = new AbortController();
+    const controller = new AbortController()
     const loadGeometry = async () => {
       if (source.kind === "url" && format) {
         return {
           geometry: await parseModelFromUrl(source.value, format),
           format,
-        };
+        }
       }
 
       const buffer =
         source.kind === "file"
           ? await source.file.arrayBuffer()
           : await fetch(source.value, { signal: controller.signal }).then(
-            async (response) => {
-              if (!response.ok) {
-                throw new Error(`Failed to fetch model (${response.status})`);
-              }
-              return response.arrayBuffer();
-            },
-          );
+              async (response) => {
+                if (!response.ok) {
+                  throw new Error(`Failed to fetch model (${response.status})`)
+                }
+                return response.arrayBuffer()
+              },
+            )
 
       if (format) {
-        return { geometry: await parseModelFromBuffer(buffer, format), format };
+        return { geometry: await parseModelFromBuffer(buffer, format), format }
       }
 
-      return parseModelFromUnknownBuffer(buffer);
-    };
+      return parseModelFromUnknownBuffer(buffer)
+    }
 
     loadGeometry()
       .then(({ geometry, format: resolvedFormat }) => {
         if (disposed) {
-          geometry.dispose();
-          return;
+          geometry.dispose()
+          return
         }
         setState({
           geometry,
@@ -153,11 +153,11 @@ function useCadGeometry(source: ModelSource) {
             source.kind === "file"
               ? `${resolvedFormat.toUpperCase()} loaded from ${source.file.name}.`
               : `${resolvedFormat.toUpperCase()} loaded successfully.`,
-        });
+        })
       })
       .catch((error: unknown) => {
         if (disposed || controller.signal.aborted) {
-          return;
+          return
         }
         setState({
           geometry: null,
@@ -166,23 +166,23 @@ function useCadGeometry(source: ModelSource) {
             error instanceof Error
               ? `${error.message}. Falling back to size box.`
               : "Failed to load model. Falling back to size box.",
-        });
-      });
+        })
+      })
 
     return () => {
-      disposed = true;
-      controller.abort();
-    };
-  }, [source]);
+      disposed = true
+      controller.abort()
+    }
+  }, [source])
 
   useEffect(
     () => () => {
-      state.geometry?.dispose();
+      state.geometry?.dispose()
     },
     [state.geometry],
-  );
+  )
 
-  return state;
+  return state
 }
 
 function SceneCanvas({
@@ -191,78 +191,82 @@ function SceneCanvas({
   up,
   buildScene,
 }: {
-  title: string;
-  subtitle: string;
-  up: THREE.Vector3;
-  buildScene: (
-    scene: THREE.Scene,
-  ) => { hoverTargets?: HoverTarget[]; overlayObjects?: THREE.Object3D[] } | void;
+  title: string
+  subtitle: string
+  up: THREE.Vector3
+  buildScene: (scene: THREE.Scene) => {
+    hoverTargets?: HoverTarget[]
+    overlayObjects?: THREE.Object3D[]
+  } | void
 }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const cameraRef = useRef<THREE.Camera | null>(null);
-  const controlsRef = useRef<ReturnType<typeof createControls> | null>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const overlaySceneRef = useRef<THREE.Scene | null>(null);
-  const hoverTargetsRef = useRef<HoverTarget[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
+  const cameraRef = useRef<THREE.Camera | null>(null)
+  const controlsRef = useRef<ReturnType<typeof createControls> | null>(null)
+  const sceneRef = useRef<THREE.Scene | null>(null)
+  const overlaySceneRef = useRef<THREE.Scene | null>(null)
+  const hoverTargetsRef = useRef<HoverTarget[]>([])
   const [projection, setProjection] = useState<"perspective" | "orthographic">(
     "orthographic",
-  );
+  )
   const [viewPreset, setViewPreset] = useState<
     "side" | "front" | "top" | "corner"
-  >("corner");
+  >("corner")
   const [hovered, setHovered] = useState<{
-    x: number;
-    y: number;
-    lines: string[];
-  } | null>(null);
+    x: number
+    y: number
+    lines: string[]
+  } | null>(null)
 
   const disposeScene = (scene: THREE.Scene | null) => {
     if (!scene) {
-      return;
+      return
     }
     scene.traverse((object: THREE.Object3D) => {
       if (object instanceof THREE.Mesh) {
-        object.geometry.dispose();
+        object.geometry.dispose()
         if (Array.isArray(object.material)) {
           for (const material of object.material) {
-            material.dispose();
+            material.dispose()
           }
         } else {
-          object.material.dispose();
+          object.material.dispose()
         }
       }
-    });
-    scene.clear();
-  };
+    })
+    scene.clear()
+  }
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = canvasRef.current
     if (!canvas) {
-      return;
+      return
     }
 
-    const renderer = createRenderer(canvas);
-    renderer.autoClear = false;
+    const renderer = createRenderer(canvas)
+    renderer.autoClear = false
     const createActiveCamera = () => {
       const direction = (() => {
         switch (viewPreset) {
           case "top":
-            return up.clone().normalize();
+            return up.clone().normalize()
           case "front":
-            return new THREE.Vector3(0, 1, 0);
+            return new THREE.Vector3(0, 1, 0)
           case "side":
-            return new THREE.Vector3(1, 0, 0);
+            return new THREE.Vector3(1, 0, 0)
           case "corner":
           default:
-            return new THREE.Vector3(1, 1, 1).normalize();
+            return new THREE.Vector3(1, 1, 1).normalize()
         }
-      })();
-      const distance = 90;
+      })()
+      const distance = 90
 
       if (projection === "orthographic") {
-        const aspect = Math.max(canvas.clientWidth / Math.max(canvas.clientHeight, 1), 1);
-        const frustum = 40;
+        const aspect = Math.max(
+          canvas.clientWidth / Math.max(canvas.clientHeight, 1),
+          1,
+        )
+        const frustum = 40
         const camera = new THREE.OrthographicCamera(
           -frustum * aspect,
           frustum * aspect,
@@ -270,46 +274,46 @@ function SceneCanvas({
           -frustum,
           0.1,
           1000,
-        );
-        camera.up.copy(up);
-        camera.position.copy(direction.multiplyScalar(distance));
-        return camera;
+        )
+        camera.up.copy(up)
+        camera.position.copy(direction.multiplyScalar(distance))
+        return camera
       }
 
-      const camera = createCamera(up);
-      camera.position.copy(direction.multiplyScalar(distance));
-      return camera;
-    };
+      const camera = createCamera(up)
+      camera.position.copy(direction.multiplyScalar(distance))
+      return camera
+    }
 
-    const camera = createActiveCamera();
-    const controls = createControls(camera, canvas);
-    const scene = new THREE.Scene();
-    const overlayScene = new THREE.Scene();
-    rendererRef.current = renderer;
-    cameraRef.current = camera;
-    controlsRef.current = controls;
-    sceneRef.current = scene;
-    overlaySceneRef.current = overlayScene;
-    const raycaster = new THREE.Raycaster();
-    const pointer = new THREE.Vector2();
+    const camera = createActiveCamera()
+    const controls = createControls(camera, canvas)
+    const scene = new THREE.Scene()
+    const overlayScene = new THREE.Scene()
+    rendererRef.current = renderer
+    cameraRef.current = camera
+    controlsRef.current = controls
+    sceneRef.current = scene
+    overlaySceneRef.current = overlayScene
+    const raycaster = new THREE.Raycaster()
+    const pointer = new THREE.Vector2()
 
-    const resize = () => fitRenderer(renderer, camera, canvas);
-    resize();
+    const resize = () => fitRenderer(renderer, camera, canvas)
+    resize()
 
     const updateHover = (clientX: number, clientY: number) => {
-      const rect = canvas.getBoundingClientRect();
-      pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(pointer, camera);
+      const rect = canvas.getBoundingClientRect()
+      pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1
+      pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1
+      raycaster.setFromCamera(pointer, camera)
       const intersections = raycaster.intersectObjects(
         hoverTargetsRef.current.map((target) => target.object),
         true,
-      );
+      )
 
       if (intersections.length === 0) {
-        setHovered(null);
-        canvas.style.cursor = "default";
-        return;
+        setHovered(null)
+        canvas.style.cursor = "default"
+        return
       }
 
       const hit = hoverTargetsRef.current.find((target) =>
@@ -318,81 +322,81 @@ function SceneCanvas({
             intersection.object === target.object ||
             target.object.children.includes(intersection.object),
         ),
-      );
+      )
 
       if (!hit) {
-        setHovered(null);
-        canvas.style.cursor = "default";
-        return;
+        setHovered(null)
+        canvas.style.cursor = "default"
+        return
       }
 
-      const projected = hit.position.clone().project(camera);
+      const projected = hit.position.clone().project(camera)
       setHovered({
         x: ((projected.x + 1) / 2) * rect.width,
         y: ((-projected.y + 1) / 2) * rect.height - 12,
         lines: hit.lines,
-      });
-      canvas.style.cursor = "pointer";
-    };
+      })
+      canvas.style.cursor = "pointer"
+    }
 
     const onPointerMove = (event: PointerEvent) => {
-      updateHover(event.clientX, event.clientY);
-    };
+      updateHover(event.clientX, event.clientY)
+    }
 
     const onPointerLeave = () => {
-      setHovered(null);
-      canvas.style.cursor = "default";
-    };
+      setHovered(null)
+      canvas.style.cursor = "default"
+    }
 
-    canvas.addEventListener("pointermove", onPointerMove);
-    canvas.addEventListener("pointerleave", onPointerLeave);
+    canvas.addEventListener("pointermove", onPointerMove)
+    canvas.addEventListener("pointerleave", onPointerLeave)
 
-    let animationFrame = 0;
+    let animationFrame = 0
     const render = () => {
-      animationFrame = window.requestAnimationFrame(render);
-      controls.update();
-      renderer.clear();
-      renderer.render(scene, camera);
-      renderer.clearDepth();
-      renderer.render(overlayScene, camera);
-    };
-    render();
+      animationFrame = window.requestAnimationFrame(render)
+      controls.update()
+      renderer.clear()
+      renderer.render(scene, camera)
+      renderer.clearDepth()
+      renderer.render(overlayScene, camera)
+    }
+    render()
 
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
+    const observer = new ResizeObserver(resize)
+    observer.observe(canvas)
 
     return () => {
-      window.cancelAnimationFrame(animationFrame);
-      observer.disconnect();
-      canvas.removeEventListener("pointermove", onPointerMove);
-      canvas.removeEventListener("pointerleave", onPointerLeave);
-      controls.dispose();
-      renderer.dispose();
-      disposeScene(scene);
-      disposeScene(overlayScene);
-      hoverTargetsRef.current = [];
-      rendererRef.current = null;
-      cameraRef.current = null;
-      controlsRef.current = null;
-      sceneRef.current = null;
-      overlaySceneRef.current = null;
-    };
-  }, [projection, up, viewPreset]);
+      window.cancelAnimationFrame(animationFrame)
+      observer.disconnect()
+      canvas.removeEventListener("pointermove", onPointerMove)
+      canvas.removeEventListener("pointerleave", onPointerLeave)
+      controls.dispose()
+      renderer.dispose()
+      disposeScene(scene)
+      disposeScene(overlayScene)
+      hoverTargetsRef.current = []
+      rendererRef.current = null
+      cameraRef.current = null
+      controlsRef.current = null
+      sceneRef.current = null
+      overlaySceneRef.current = null
+    }
+  }, [projection, up, viewPreset])
 
   useEffect(() => {
-    const scene = sceneRef.current;
-    const overlayScene = overlaySceneRef.current;
+    const scene = sceneRef.current
+    const overlayScene = overlaySceneRef.current
     if (!scene || !overlayScene) {
-      return;
+      return
     }
-    disposeScene(scene);
-    disposeScene(overlayScene);
-    const buildResult = buildScene(scene);
-    hoverTargetsRef.current = buildResult?.hoverTargets ?? [];
+    disposeScene(scene)
+    disposeScene(overlayScene)
+    const buildResult = buildScene(scene)
+    hoverTargetsRef.current = buildResult?.hoverTargets ?? []
     for (const object of buildResult?.overlayObjects ?? []) {
-      overlayScene.add(object);
+      overlayScene.add(object)
     }
-  }, [buildScene, projection, up, viewPreset]);
+  }, [buildScene, projection, up, viewPreset])
 
   return (
     <section className="viewport">
@@ -440,7 +444,7 @@ function SceneCanvas({
         ) : null}
       </div>
     </section>
-  );
+  )
 }
 
 function NumberField({
@@ -449,10 +453,10 @@ function NumberField({
   step = 0.1,
   onChange,
 }: {
-  label: string;
-  value: number;
-  step?: number;
-  onChange: (value: number) => void;
+  label: string
+  value: number
+  step?: number
+  onChange: (value: number) => void
 }) {
   return (
     <label className="control-row">
@@ -464,7 +468,7 @@ function NumberField({
         onChange={(event) => onChange(Number(event.target.value))}
       />
     </label>
-  );
+  )
 }
 
 function CheckboxField({
@@ -472,9 +476,9 @@ function CheckboxField({
   checked,
   onChange,
 }: {
-  label: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
+  label: string
+  checked: boolean
+  onChange: (value: boolean) => void
 }) {
   return (
     <label className="checkbox-row">
@@ -485,7 +489,7 @@ function CheckboxField({
       />
       <span>{label}</span>
     </label>
-  );
+  )
 }
 
 function Vector3Field({
@@ -495,13 +499,13 @@ function Vector3Field({
   step = 0.1,
   onChange,
 }: {
-  title: string;
-  labels: [string, string, string];
-  values: [number, number, number];
-  step?: number;
-  onChange: (axis: "x" | "y" | "z", value: number) => void;
+  title: string
+  labels: [string, string, string]
+  values: [number, number, number]
+  step?: number
+  onChange: (axis: "x" | "y" | "z", value: number) => void
 }) {
-  const axes: Array<"x" | "y" | "z"> = ["x", "y", "z"];
+  const axes: Array<"x" | "y" | "z"> = ["x", "y", "z"]
   return (
     <div className="vector3-block">
       <div className="vector3-title">{title}</div>
@@ -524,7 +528,7 @@ function Vector3Field({
         ))}
       </div>
     </div>
-  );
+  )
 }
 
 function SelectField<T extends string>({
@@ -533,15 +537,18 @@ function SelectField<T extends string>({
   options,
   onChange,
 }: {
-  label: string;
-  value: T;
-  options: readonly T[];
-  onChange: (value: T) => void;
+  label: string
+  value: T
+  options: readonly T[]
+  onChange: (value: T) => void
 }) {
   return (
     <label className="control-row">
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value as T)}>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+      >
         {options.map((option) => (
           <option key={option} value={option}>
             {option}
@@ -549,15 +556,15 @@ function SelectField<T extends string>({
         ))}
       </select>
     </label>
-  );
+  )
 }
 
 function Section({
   title,
   children,
 }: {
-  title: string;
-  children: React.ReactNode;
+  title: string
+  children: React.ReactNode
 }) {
   return (
     <section className="editor-card">
@@ -566,13 +573,13 @@ function Section({
       </div>
       <div className="editor-grid">{children}</div>
     </section>
-  );
+  )
 }
 
 function createUploadedCadComponent(file: File): Required<CadComponentInput> {
-  const lowerName = file.name.toLowerCase();
+  const lowerName = file.name.toLowerCase()
   const modelBoardNormalDirection: AxisDirection =
-    lowerName.endsWith(".glb") || lowerName.endsWith(".gltf") ? "y+" : "z+";
+    lowerName.endsWith(".glb") || lowerName.endsWith(".gltf") ? "y+" : "z+"
 
   return normalizeCadComponent({
     name: file.name.replace(/\.[^.]+$/, "") || file.name,
@@ -581,50 +588,62 @@ function createUploadedCadComponent(file: File): Required<CadComponentInput> {
     model_origin_position: { x: 0, y: 0, z: 0 },
     model_origin_alignment: "center_of_component_board_surface",
     model_board_normal_direction: modelBoardNormalDirection,
-  });
+  })
 }
 
 function App() {
-  const [mode, setMode] = useState<AppMode>("landing");
-  const [cad, setCad] = useState(() => normalizeCadComponent(SAMPLE_CAD_COMPONENT));
-  const [boardThickness, setBoardThickness] = useState(1.6);
-  const [showBoard, setShowBoard] = useState(true);
-  const [localModelFile, setLocalModelFile] = useState<File | null>(null);
-  const [isDragActive, setIsDragActive] = useState(false);
+  const [mode, setMode] = useState<AppMode>("landing")
+  const [cad, setCad] = useState(() =>
+    normalizeCadComponent(SAMPLE_CAD_COMPONENT),
+  )
+  const [boardThickness, setBoardThickness] = useState(1.6)
+  const [showBoard, setShowBoard] = useState(true)
+  const [localModelFile, setLocalModelFile] = useState<File | null>(null)
+  const [isDragActive, setIsDragActive] = useState(false)
   const [importText, setImportText] = useState(() =>
     JSON.stringify(SAMPLE_CAD_COMPONENT, null, 2),
-  );
-  const [importError, setImportError] = useState<string | null>(null);
-  const landingFileInputRef = useRef<HTMLInputElement | null>(null);
-  const dragDepthRef = useRef(0);
+  )
+  const [importError, setImportError] = useState<string | null>(null)
+  const landingFileInputRef = useRef<HTMLInputElement | null>(null)
+  const dragDepthRef = useRef(0)
 
-  const debouncedCad = useDebouncedValue(cad, 350);
-  const debouncedBoardThickness = useDebouncedValue(boardThickness, 350);
+  const debouncedCad = useDebouncedValue(cad, 350)
+  const debouncedBoardThickness = useDebouncedValue(boardThickness, 350)
   const modelSource = useMemo<ModelSource>(() => {
     if (localModelFile) {
-      return { kind: "file", file: localModelFile };
+      return { kind: "file", file: localModelFile }
     }
-    const modelUrl = debouncedCad.model_obj_url.trim();
+    const modelUrl = debouncedCad.model_obj_url.trim()
     if (modelUrl) {
-      return { kind: "url", value: modelUrl };
+      return { kind: "url", value: modelUrl }
     }
-    return { kind: "none" };
-  }, [debouncedCad.model_obj_url, localModelFile]);
+    return { kind: "none" }
+  }, [debouncedCad.model_obj_url, localModelFile])
   const fallbackGeometry = useMemo(
     () => buildFallbackGeometry(debouncedCad),
     [debouncedCad],
-  );
-  const { geometry: fetchedGeometry, status, message } = useCadGeometry(modelSource);
-  const geometry = fetchedGeometry ?? fallbackGeometry;
-  const placement = useMemo(() => computePlacement(debouncedCad), [debouncedCad]);
-  const geometryBounds = useMemo(() => getGeometryBounds(geometry), [geometry]);
-  const generatedJson = useMemo(() => JSON.stringify(cad, null, 2), [cad]);
+  )
+  const {
+    geometry: fetchedGeometry,
+    status,
+    message,
+  } = useCadGeometry(modelSource)
+  const geometry = fetchedGeometry ?? fallbackGeometry
+  const placement = useMemo(
+    () => computePlacement(debouncedCad),
+    [debouncedCad],
+  )
+  const geometryBounds = useMemo(() => getGeometryBounds(geometry), [geometry])
+  const generatedJson = useMemo(() => JSON.stringify(cad, null, 2), [cad])
   const formatVec3 = (vector: THREE.Vector3) =>
-    `(${vector.x.toFixed(2)}, ${vector.y.toFixed(2)}, ${vector.z.toFixed(2)})`;
+    `(${vector.x.toFixed(2)}, ${vector.y.toFixed(2)}, ${vector.z.toFixed(2)})`
 
-  const update = <K extends keyof typeof cad>(key: K, value: (typeof cad)[K]) => {
-    setCad((current) => ({ ...current, [key]: value }));
-  };
+  const update = <K extends keyof typeof cad>(
+    key: K,
+    value: (typeof cad)[K],
+  ) => {
+    setCad((current) => ({ ...current, [key]: value }))
+  }
 
   const updateVec3 = (
     key: "model_origin_position" | "position",
@@ -637,99 +656,96 @@ function App() {
         ...current[key],
         [axis]: value,
       },
-    }));
-  };
+    }))
+  }
 
-  const updateSize = (
-    axis: "x" | "y" | "z",
-    value: number,
-  ) => {
+  const updateSize = (axis: "x" | "y" | "z", value: number) => {
     setCad((current) => ({
       ...current,
       size: {
         ...current.size,
         [axis]: value,
       },
-    }));
-  };
+    }))
+  }
 
   const applyCadState = (
     nextCad: Required<CadComponentInput>,
     nextFile: File | null,
   ) => {
-    setCad(nextCad);
-    setLocalModelFile(nextFile);
-    setImportText(JSON.stringify(nextCad, null, 2));
-    setImportError(null);
-    setMode("workspace");
-  };
+    setCad(nextCad)
+    setLocalModelFile(nextFile)
+    setImportText(JSON.stringify(nextCad, null, 2))
+    setImportError(null)
+    setMode("workspace")
+  }
 
   const loadDemoModel = () => {
-    applyCadState(normalizeCadComponent(SAMPLE_CAD_COMPONENT), null);
-  };
+    applyCadState(normalizeCadComponent(SAMPLE_CAD_COMPONENT), null)
+  }
 
   const loadDroppedModel = (file: File) => {
-    applyCadState(createUploadedCadComponent(file), file);
-  };
+    applyCadState(createUploadedCadComponent(file), file)
+  }
 
   const setDragInactive = () => {
-    dragDepthRef.current = 0;
-    setIsDragActive(false);
-  };
+    dragDepthRef.current = 0
+    setIsDragActive(false)
+  }
 
   const handleDragEnter = (event: React.DragEvent<HTMLElement>) => {
-    event.preventDefault();
-    dragDepthRef.current += 1;
-    setIsDragActive(true);
-  };
+    event.preventDefault()
+    dragDepthRef.current += 1
+    setIsDragActive(true)
+  }
 
   const handleDragOver = (event: React.DragEvent<HTMLElement>) => {
-    event.preventDefault();
+    event.preventDefault()
     if (!isDragActive) {
-      setIsDragActive(true);
+      setIsDragActive(true)
     }
-  };
+  }
 
   const handleDragLeave = (event: React.DragEvent<HTMLElement>) => {
-    event.preventDefault();
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    event.preventDefault()
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
     if (dragDepthRef.current === 0) {
-      setIsDragActive(false);
+      setIsDragActive(false)
     }
-  };
+  }
 
   const handleDrop = (event: React.DragEvent<HTMLElement>) => {
-    event.preventDefault();
-    const file = event.dataTransfer.files?.[0];
-    setDragInactive();
+    event.preventDefault()
+    const file = event.dataTransfer.files?.[0]
+    setDragInactive()
     if (file) {
-      loadDroppedModel(file);
+      loadDroppedModel(file)
     }
-  };
+  }
 
   const importJson = () => {
-    const parsed = parseInput(importText);
+    const parsed = parseInput(importText)
     if (!parsed.value) {
-      setImportError(parsed.error ?? "Invalid JSON");
-      return;
+      setImportError(parsed.error ?? "Invalid JSON")
+      return
     }
-    setCad(normalizeCadComponent(parsed.value));
-    setLocalModelFile(null);
-    setImportError(null);
-    setMode("workspace");
-  };
+    setCad(normalizeCadComponent(parsed.value))
+    setLocalModelFile(null)
+    setImportError(null)
+    setMode("workspace")
+  }
 
   const viewerScene = useMemo(
     () => (scene: THREE.Scene) => {
-      addDefaultLights(scene);
-      scene.add(makeGrid(90, 36, "z+"));
+      addDefaultLights(scene)
+      scene.add(makeGrid(90, 36, "z+"))
       if (showBoard) {
-        scene.add(makeBoard(debouncedBoardThickness));
+        scene.add(makeBoard(debouncedBoardThickness))
       }
 
-      const placed = new THREE.Group();
-      placed.rotation.copy(placement.rotation);
-      placed.position.copy(placement.translation);
+      const placed = new THREE.Group()
+      placed.rotation.copy(placement.rotation)
+      placed.position.copy(placement.translation)
       placed.add(
         new THREE.Mesh(
           geometry.clone(),
@@ -740,42 +756,42 @@ function App() {
             side: THREE.DoubleSide,
           }),
         ),
-      );
-      scene.add(placed);
-      placed.updateMatrixWorld(true);
+      )
+      scene.add(placed)
+      placed.updateMatrixWorld(true)
       const boardPosition = new THREE.Vector3(
         debouncedCad.position.x,
         debouncedCad.position.y,
         debouncedCad.position.z,
-      );
+      )
       const boardPositionMarker = makeHoverMarker(boardPosition, [
         `Cad Component Position ${formatVec3(boardPosition)}`,
         `Anchor Alignment: ${debouncedCad.anchor_alignment}`,
-      ]);
+      ])
       const modelOriginWorld = placement.modelOrigin
         .clone()
         .applyEuler(placement.rotation)
-        .add(placement.translation);
+        .add(placement.translation)
       const modelOriginMarker = makeHoverMarker(modelOriginWorld, [
         `Model Origin ${formatVec3(modelOriginWorld)}`,
         `Model Origin Alignment: ${debouncedCad.model_origin_alignment}`,
-      ]);
+      ])
 
       const placedBounds = geometryBounds.boundingBox
         .clone()
-        .applyMatrix4(placed.matrixWorld);
-      scene.add(makeAxesToBadgePositions(placedBounds, placement.rotation));
-      scene.add(makeAxisBadges(placedBounds, placement.rotation));
+        .applyMatrix4(placed.matrixWorld)
+      scene.add(makeAxesToBadgePositions(placedBounds, placement.rotation))
+      scene.add(makeAxisBadges(placedBounds, placement.rotation))
       scene.add(
         makeBoardNormalArrow(
           modelOriginWorld,
           debouncedCad.model_board_normal_direction,
         ),
-      );
+      )
       return {
         hoverTargets: [boardPositionMarker.target, modelOriginMarker.target],
         overlayObjects: [boardPositionMarker.group, modelOriginMarker.group],
-      };
+      }
     },
     [
       debouncedCad.anchor_alignment,
@@ -792,10 +808,10 @@ function App() {
       placement.translation,
       showBoard,
     ],
-  );
+  )
 
   const statusClass =
-    status === "ready" ? "ok" : status === "loading" ? "loading" : "warning";
+    status === "ready" ? "ok" : status === "loading" ? "loading" : "warning"
 
   if (mode === "landing") {
     return (
@@ -823,7 +839,11 @@ function App() {
               >
                 Choose model
               </button>
-              <button type="button" className="secondary" onClick={loadDemoModel}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={loadDemoModel}
+              >
                 Load demo
               </button>
             </div>
@@ -833,17 +853,17 @@ function App() {
               type="file"
               accept=".obj,.step,.stp,.gltf,.glb"
               onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
+                const file = event.target.files?.[0] ?? null
                 if (file) {
-                  loadDroppedModel(file);
+                  loadDroppedModel(file)
                 }
-                event.target.value = "";
+                event.target.value = ""
               }}
             />
           </div>
         </section>
       </main>
-    );
+    )
   }
 
   return (
@@ -866,8 +886,9 @@ function App() {
           <p className="eyebrow">Circuit JSON</p>
           <h1>`cad_component` visualizer</h1>
           <p className="lede">
-            Edit placement fields directly, then inspect OBJ,STEP or gltf geometry in
-            a single board-space viewer with the board overlay toggled on or off.
+            Edit placement fields directly, then inspect OBJ,STEP or gltf
+            geometry in a single board-space viewer with the board overlay
+            toggled on or off.
           </p>
         </div>
 
@@ -888,7 +909,9 @@ function App() {
               cad.model_origin_position.y,
               cad.model_origin_position.z,
             ]}
-            onChange={(axis, value) => updateVec3("model_origin_position", axis, value)}
+            onChange={(axis, value) =>
+              updateVec3("model_origin_position", axis, value)
+            }
           />
           <SelectField<Alignment>
             label="model_origin_alignment"
@@ -932,8 +955,8 @@ function App() {
               type="text"
               value={cad.model_obj_url}
               onChange={(event) => {
-                setLocalModelFile(null);
-                update("model_obj_url", event.target.value);
+                setLocalModelFile(null)
+                update("model_obj_url", event.target.value)
               }}
             />
           </label>
@@ -943,10 +966,10 @@ function App() {
               type="file"
               accept=".obj,.step,.stp,.gltf,.glb"
               onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                setLocalModelFile(file);
+                const file = event.target.files?.[0] ?? null
+                setLocalModelFile(file)
                 if (file) {
-                  update("model_obj_url", "");
+                  update("model_obj_url", "")
                 }
               }}
             />
@@ -997,7 +1020,9 @@ function App() {
             </button>
           </div>
           {importError ? (
-            <div className="status-pill error">JSON parse error: {importError}</div>
+            <div className="status-pill error">
+              JSON parse error: {importError}
+            </div>
           ) : null}
           <label className="field">
             <span>Generated `cad_component`</span>
@@ -1020,7 +1045,7 @@ function App() {
         />
       </section>
     </main>
-  );
+  )
 }
 
-export default App;
+export default App
