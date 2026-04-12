@@ -449,6 +449,44 @@ select {
   flex-direction: column;
 }
 
+.viewport-loading {
+  height: 100%;
+}
+
+.viewport-loading-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top, rgba(219, 234, 254, 0.72), transparent 55%),
+    linear-gradient(180deg, #f8fbff, #ffffff);
+}
+
+.viewport-loading-card {
+  width: min(320px, 100%);
+  display: grid;
+  gap: 8px;
+  padding: 20px 22px;
+  text-align: center;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 20px 56px rgba(37, 99, 235, 0.1);
+}
+
+.viewport-loading-card strong {
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+}
+
+.viewport-loading-card span {
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .viewport-body {
   position: relative;
   flex: 1;
