@@ -410,20 +410,37 @@ function SceneCanvas({
           <p>{subtitle}</p>
         </div>
         <div className="viewport-actions">
-          <button type="button" onClick={() => setViewPreset("side")}>
+          <button
+            type="button"
+            className={viewPreset === "side" ? "is-active" : undefined}
+            onClick={() => setViewPreset("side")}
+          >
             Side
           </button>
-          <button type="button" onClick={() => setViewPreset("front")}>
+          <button
+            type="button"
+            className={viewPreset === "front" ? "is-active" : undefined}
+            onClick={() => setViewPreset("front")}
+          >
             Front
           </button>
-          <button type="button" onClick={() => setViewPreset("top")}>
+          <button
+            type="button"
+            className={viewPreset === "top" ? "is-active" : undefined}
+            onClick={() => setViewPreset("top")}
+          >
             Top
           </button>
-          <button type="button" onClick={() => setViewPreset("corner")}>
+          <button
+            type="button"
+            className={viewPreset === "corner" ? "is-active" : undefined}
+            onClick={() => setViewPreset("corner")}
+          >
             Corner
           </button>
           <button
             type="button"
+            className="projection-toggle"
             onClick={() =>
               setProjection((current) =>
                 current === "perspective" ? "orthographic" : "perspective",
@@ -578,18 +595,21 @@ function SelectField<T extends string>({
 
 function Section({
   title,
+  description,
   children,
 }: {
   title: string
+  description?: string
   children: React.ReactNode
 }) {
   return (
-    <section className="editor-card">
+    <details className="editor-card collapsible-section" open>
+      <summary>{title}</summary>
       <div className="editor-card-header">
-        <h2>{title}</h2>
+        {description ? <p>{description}</p> : null}
       </div>
       <div className="editor-grid">{children}</div>
-    </section>
+    </details>
   )
 }
 
@@ -626,16 +646,18 @@ function App() {
 
   const debouncedCad = useDebouncedValue(cad, 350)
   const debouncedBoardThickness = useDebouncedValue(boardThickness, 350)
-  const modelSource = useMemo<ModelSource>(() => {
-    if (localModelFile) {
-      return { kind: "file", file: localModelFile }
-    }
+  const fileModelSource = useMemo<ModelSource | null>(
+    () => (localModelFile ? { kind: "file", file: localModelFile } : null),
+    [localModelFile],
+  )
+  const urlModelSource = useMemo<ModelSource>(() => {
     const modelUrl = debouncedCad.model_obj_url.trim()
     if (modelUrl) {
       return { kind: "url", value: modelUrl }
     }
     return { kind: "none" }
-  }, [debouncedCad.model_obj_url, localModelFile])
+  }, [debouncedCad.model_obj_url])
+  const modelSource = fileModelSource ?? urlModelSource
   const fallbackGeometry = useMemo(
     () => buildFallbackGeometry(debouncedCad),
     [debouncedCad],
@@ -650,6 +672,26 @@ function App() {
   const generatedJson = useMemo(() => JSON.stringify(cad, null, 2), [cad])
   const formatVec3 = (vector: THREE.Vector3) =>
     `(${vector.x.toFixed(2)}, ${vector.y.toFixed(2)}, ${vector.z.toFixed(2)})`
+  const sourceType = localModelFile
+    ? "Local file"
+    : cad.model_obj_url.trim()
+      ? "Remote model"
+      : "Fallback geometry"
+  const sourceValue =
+    localModelFile?.name || cad.model_obj_url.trim() || "Size box"
+  const shortSourceValue =
+    sourceValue.length > 28 ? `${sourceValue.slice(0, 28)}...` : sourceValue
+  const statusLabel =
+    status === "ready" ? "Ready" : status === "loading" ? "Loading" : "Fallback"
+  const boardLabel = showBoard ? "Visible" : "Hidden"
+  const statusMeta =
+    status === "ready"
+      ? loadedModel
+        ? "Model loaded"
+        : "Fallback shape"
+      : status === "loading"
+        ? "Processing geometry"
+        : "Using size box"
 
   const update = <K extends keyof typeof cad>(
     key: K,
@@ -853,13 +895,14 @@ function App() {
             <div className="landing-actions">
               <button
                 type="button"
+                className="button-primary"
                 onClick={() => landingFileInputRef.current?.click()}
               >
                 Choose model
               </button>
               <button
                 type="button"
-                className="secondary"
+                className="button-secondary"
                 onClick={loadDemoModel}
               >
                 Load demo
@@ -896,163 +939,210 @@ function App() {
         <div className="workspace-drop-overlay">
           <div className="workspace-drop-card">
             <strong>Drop to replace the current model</strong>
+            <span>The current placement settings will stay in the editor.</span>
           </div>
         </div>
       ) : null}
-      <aside className="sidebar">
-        <div className="hero">
-          <p className="eyebrow">Circuit JSON</p>
-          <h1>`cad_component` visualizer</h1>
-          <p className="lede">
-            Edit placement fields directly, then inspect OBJ,STEP or gltf
-            geometry in a single board-space viewer with the board overlay
-            toggled on or off.
-          </p>
-        </div>
+      <div className="sidebar-frame">
+        <aside className="sidebar">
+          <div className="sidebar-scroll">
+            <section className="hero-card">
+              <div className="sidebar-toolbar">
+                <div className="hero">
+                  <p className="eyebrow">Controls</p>
+                  <h1>`cad_component`</h1>
+                </div>
+              </div>
 
-        <div className="actions">
-          <button type="button" onClick={() => setMode("landing")}>
-            Load another model
-          </button>
-        </div>
+              <div className="summary-strip">
+                <article
+                  className={`summary-card compact status-${statusClass}`}
+                >
+                  <span className="summary-label">Status</span>
+                  <strong>{statusLabel}</strong>
+                  <p>{statusMeta}</p>
+                </article>
+                <article className="summary-card compact source-card">
+                  <span className="summary-label">Source</span>
+                  <strong>{sourceType}</strong>
+                  <p title={sourceValue}>{shortSourceValue}</p>
+                </article>
+                <article className="summary-card compact board-card">
+                  <span className="summary-label">Board</span>
+                  <strong>{boardLabel}</strong>
+                  <p>{`Thickness ${boardThickness.toFixed(2)} mm`}</p>
+                </article>
+              </div>
 
-        <div className={`status-pill ${statusClass}`}>{message}</div>
+              <div className="actions hero-actions">
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setMode("landing")}
+                >
+                  Load another model
+                </button>
+              </div>
+            </section>
 
-        <Section title="component model">
-          <Vector3Field
-            title="model_origin_position"
-            labels={["x", "y", "z"]}
-            values={[
-              cad.model_origin_position.x,
-              cad.model_origin_position.y,
-              cad.model_origin_position.z,
-            ]}
-            onChange={(axis, value) =>
-              updateVec3("model_origin_position", axis, value)
-            }
-          />
-          <SelectField<Alignment>
-            label="model_origin_alignment"
-            value={cad.model_origin_alignment}
-            options={ALIGNMENT_OPTIONS}
-            onChange={(value) => update("model_origin_alignment", value)}
-          />
-          <SelectField<AxisDirection>
-            label="model_board_normal_direction"
-            value={cad.model_board_normal_direction}
-            options={NORMAL_OPTIONS}
-            onChange={(value) => update("model_board_normal_direction", value)}
-          />
-        </Section>
-
-        <Section title="component">
-          <Vector3Field
-            title="position"
-            labels={["x", "y", "z"]}
-            values={[cad.position.x, cad.position.y, cad.position.z]}
-            onChange={(axis, value) => updateVec3("position", axis, value)}
-          />
-          <Vector3Field
-            title="size"
-            labels={["x", "y", "z"]}
-            values={[cad.size.x, cad.size.y, cad.size.z]}
-            onChange={(axis, value) => updateSize(axis, value)}
-          />
-          <SelectField<Alignment>
-            label="anchor_alignment"
-            value={cad.anchor_alignment}
-            options={ALIGNMENT_OPTIONS}
-            onChange={(value) => update("anchor_alignment", value)}
-          />
-        </Section>
-
-        <Section title="model source">
-          <label className="control-stack">
-            <span>Model URL (.obj, .step, .stp, .gltf, .glb)</span>
-            <input
-              type="text"
-              value={cad.model_obj_url}
-              onChange={(event) => {
-                setLocalModelFile(null)
-                update("model_obj_url", event.target.value)
-              }}
-            />
-          </label>
-          <label className="control-stack">
-            <span>Local model file (.obj, .step, .stp, .gltf, .glb)</span>
-            <input
-              type="file"
-              accept=".obj,.step,.stp,.gltf,.glb"
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null
-                setLocalModelFile(file)
-                if (file) {
-                  update("model_obj_url", "")
+            <Section
+              title="Component Model"
+              description="Define the imported geometry origin and the board-facing normal used for placement."
+            >
+              <Vector3Field
+                title="model_origin_position"
+                labels={["x", "y", "z"]}
+                values={[
+                  cad.model_origin_position.x,
+                  cad.model_origin_position.y,
+                  cad.model_origin_position.z,
+                ]}
+                onChange={(axis, value) =>
+                  updateVec3("model_origin_position", axis, value)
                 }
-              }}
-            />
-          </label>
-          {localModelFile ? (
-            <div className="actions">
-              <button type="button" onClick={() => setLocalModelFile(null)}>
-                Clear local file ({localModelFile.name})
-              </button>
-            </div>
-          ) : null}
-        </Section>
+              />
+              <SelectField<Alignment>
+                label="model_origin_alignment"
+                value={cad.model_origin_alignment}
+                options={ALIGNMENT_OPTIONS}
+                onChange={(value) => update("model_origin_alignment", value)}
+              />
+              <SelectField<AxisDirection>
+                label="model_board_normal_direction"
+                value={cad.model_board_normal_direction}
+                options={NORMAL_OPTIONS}
+                onChange={(value) =>
+                  update("model_board_normal_direction", value)
+                }
+              />
+            </Section>
 
-        <details className="json-panel" open>
-          <summary>board properties</summary>
-          <div className="editor-grid details-grid">
-            <NumberField
-              label="board_thickness"
-              value={boardThickness}
-              onChange={setBoardThickness}
-            />
-            <CheckboxField
-              label="show_board"
-              checked={showBoard}
-              onChange={setShowBoard}
-            />
-          </div>
-        </details>
+            <Section
+              title="Component Placement"
+              description="Position the component in board space and control the anchor used for alignment."
+            >
+              <Vector3Field
+                title="position"
+                labels={["x", "y", "z"]}
+                values={[cad.position.x, cad.position.y, cad.position.z]}
+                onChange={(axis, value) => updateVec3("position", axis, value)}
+              />
+              <Vector3Field
+                title="size"
+                labels={["x", "y", "z"]}
+                values={[cad.size.x, cad.size.y, cad.size.z]}
+                onChange={(axis, value) => updateSize(axis, value)}
+              />
+              <SelectField<Alignment>
+                label="anchor_alignment"
+                value={cad.anchor_alignment}
+                options={ALIGNMENT_OPTIONS}
+                onChange={(value) => update("anchor_alignment", value)}
+              />
+            </Section>
 
-        <details className="json-panel">
-          <summary>Circuit JSON</summary>
-          <p className="json-help">
-            Import by pasting JSON and clicking apply. The form controls stay
-            authoritative for editing.
-          </p>
-          <label className="field">
-            <span>Paste JSON</span>
-            <textarea
-              className="import-textarea"
-              value={importText}
-              onChange={(event) => setImportText(event.target.value)}
-              spellCheck={false}
-            />
-          </label>
-          <div className="actions">
-            <button type="button" onClick={importJson}>
-              Apply pasted JSON
-            </button>
+            <Section
+              title="Model Source"
+              description="Switch between a remote asset URL and a local upload while keeping placement edits intact."
+            >
+              <label className="control-stack">
+                <span>Model URL (.obj, .step, .stp, .gltf, .glb)</span>
+                <input
+                  type="text"
+                  value={cad.model_obj_url}
+                  placeholder="https://example.com/component.glb"
+                  onChange={(event) => {
+                    setLocalModelFile(null)
+                    update("model_obj_url", event.target.value)
+                  }}
+                />
+              </label>
+              <label className="control-stack file-picker">
+                <span>Local model file (.obj, .step, .stp, .gltf, .glb)</span>
+                <input
+                  type="file"
+                  accept=".obj,.step,.stp,.gltf,.glb"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null
+                    setLocalModelFile(file)
+                    if (file) {
+                      update("model_obj_url", "")
+                    }
+                  }}
+                />
+              </label>
+              {localModelFile ? (
+                <div className="inline-action-row">
+                  <div className="file-chip">{localModelFile.name}</div>
+                  <button
+                    type="button"
+                    className="button-ghost"
+                    onClick={() => setLocalModelFile(null)}
+                  >
+                    Clear local file
+                  </button>
+                </div>
+              ) : null}
+            </Section>
+
+            <details className="json-panel" open>
+              <summary>Board Properties</summary>
+              <div className="editor-grid details-grid">
+                <NumberField
+                  label="board_thickness"
+                  value={boardThickness}
+                  onChange={setBoardThickness}
+                />
+                <CheckboxField
+                  label="show_board"
+                  checked={showBoard}
+                  onChange={setShowBoard}
+                />
+              </div>
+            </details>
+
+            <details className="json-panel">
+              <summary>Circuit JSON</summary>
+              <p className="json-help">
+                Import by pasting JSON and clicking apply. The form controls
+                stay authoritative for editing.
+              </p>
+              <label className="field">
+                <span>Paste JSON</span>
+                <textarea
+                  className="import-textarea"
+                  value={importText}
+                  onChange={(event) => setImportText(event.target.value)}
+                  spellCheck={false}
+                />
+              </label>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="button-primary"
+                  onClick={importJson}
+                >
+                  Apply pasted JSON
+                </button>
+              </div>
+              {importError ? (
+                <div className="status-pill error">
+                  JSON parse error: {importError}
+                </div>
+              ) : null}
+              <label className="field">
+                <span>Generated `cad_component`</span>
+                <textarea
+                  className="json-output"
+                  value={generatedJson}
+                  readOnly
+                  spellCheck={false}
+                />
+              </label>
+            </details>
           </div>
-          {importError ? (
-            <div className="status-pill error">
-              JSON parse error: {importError}
-            </div>
-          ) : null}
-          <label className="field">
-            <span>Generated `cad_component`</span>
-            <textarea
-              className="json-output"
-              value={generatedJson}
-              readOnly
-              spellCheck={false}
-            />
-          </label>
-        </details>
-      </aside>
+        </aside>
+      </div>
 
       <section className="viewer-panel">
         {status === "loading" ? (
