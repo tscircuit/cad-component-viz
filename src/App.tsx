@@ -451,6 +451,19 @@ function SceneCanvas({
   )
 }
 
+function LoadingViewport({ message }: { message: string }) {
+  return (
+    <section className="viewport viewport-loading">
+      <div className="viewport-loading-body">
+        <div className="viewport-loading-card">
+          <strong>Loading model</strong>
+          <span>{message}</span>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function NumberField({
   label,
   value,
@@ -1042,12 +1055,16 @@ function App() {
       </aside>
 
       <section className="viewer-panel">
-        <SceneCanvas
-          title="Viewer"
-          subtitle="The model is shown in board space. Toggle the green board overlay on or off."
-          up={new THREE.Vector3(0, 0, 1)}
-          buildScene={viewerScene}
-        />
+        {status === "loading" ? (
+          <LoadingViewport message={message} />
+        ) : (
+          <SceneCanvas
+            title="Viewer"
+            subtitle="The model is shown in board space. Toggle the green board overlay on or off."
+            up={new THREE.Vector3(0, 0, 1)}
+            buildScene={viewerScene}
+          />
+        )}
       </section>
     </main>
   )
