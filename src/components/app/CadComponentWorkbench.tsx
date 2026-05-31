@@ -252,7 +252,10 @@ export function CadComponentWorkbench({
 
       <section className="viewer-panel">
         {viewer.status === "loading" ? (
-          <LoadingViewport message={viewer.message} />
+          <LoadingViewport
+            message={viewer.message}
+            progress={viewer.progress}
+          />
         ) : (
           <SceneCanvas
             title={viewer.title}

@@ -13,4 +13,5 @@ export interface CadGeometryState {
   model: LoadedModel | null
   status: CadGeometryStatus
   message: string
+  progress: number | null
 }

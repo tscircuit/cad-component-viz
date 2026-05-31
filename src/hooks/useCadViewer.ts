@@ -41,6 +41,7 @@ export interface UseCadViewerResult {
   buildScene: SceneBuildFn
   status: "idle" | "loading" | "ready" | "fallback"
   message: string
+  progress: number | null
   summary: ViewerSummary
 }
 
@@ -80,7 +81,12 @@ export function useCadViewer({
     () => buildFallbackGeometry(debouncedCad),
     [debouncedCad],
   )
-  const { model: loadedModel, status, message } = useCadGeometry(modelSource)
+  const {
+    model: loadedModel,
+    status,
+    message,
+    progress,
+  } = useCadGeometry(modelSource)
   const geometry = loadedModel?.geometry ?? fallbackGeometry
   const geometryBounds = useMemo(() => getGeometryBounds(geometry), [geometry])
   const placement = useMemo(
@@ -135,8 +141,8 @@ export function useCadViewer({
           ? "Model loaded"
           : "Fallback shape"
         : status === "loading"
-          ? "Processing geometry"
-          : "Using size box"
+          ? message
+          : message
 
     return {
       statusClass:
@@ -157,6 +163,7 @@ export function useCadViewer({
     cad.model_obj_url,
     localModelFile,
     loadedModel,
+    message,
     showBoard,
     status,
   ])
@@ -255,6 +262,7 @@ export function useCadViewer({
     buildScene,
     status,
     message,
+    progress,
     summary,
   }
 }
