@@ -144,6 +144,15 @@ export type LoadedModel = {
   geometry: THREE.BufferGeometry
   object: THREE.Object3D
 }
+export interface ModelLoadProgress {
+  loaded: number
+  total: number | null
+}
+
+interface ModelLoadOptions {
+  signal?: AbortSignal
+  onProgress?: (progress: ModelLoadProgress) => void
+}
 
 let occtModulePromise: Promise<OcctModule> | null = null
 
@@ -262,30 +271,78 @@ export async function parseModelFromUnknownBuffer(
 export async function parseModelFromUrl(
   url: string,
   format: ModelFormat,
+  options: ModelLoadOptions = {},
 ): Promise<LoadedModel> {
-  if (format === "obj") {
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(`Failed to fetch model (${response.status})`)
-    }
-    return parseModelFromBuffer(await response.arrayBuffer(), format)
-  }
-
   if (format === "gltf" || format === "glb") {
+    if (format === "glb") {
+      return parseModelFromBuffer(await fetchModelBuffer(url, options), format)
+    }
+
+    throwIfAborted(options.signal)
     const loader = new GLTFLoader()
-    const gltf = await loader.loadAsync(url)
+    const gltf = await loader.loadAsync(url, (event) => {
+      options.onProgress?.({
+        loaded: event.loaded,
+        total: event.lengthComputable ? event.total : null,
+      })
+    })
+    throwIfAborted(options.signal)
     return {
       geometry: extractGeometryFromObject3D(gltf.scene),
       object: gltf.scene,
     }
   }
 
-  const response = await fetch(url)
+  return parseModelFromBuffer(await fetchModelBuffer(url, options), format)
+}
+
+function throwIfAborted(signal: AbortSignal | undefined) {
+  if (signal?.aborted) {
+    throw new DOMException("Model load aborted.", "AbortError")
+  }
+}
+
+async function fetchModelBuffer(
+  url: string,
+  { signal, onProgress }: ModelLoadOptions,
+) {
+  throwIfAborted(signal)
+  const response = await fetch(url, { signal })
   if (!response.ok) {
     throw new Error(`Failed to fetch model (${response.status})`)
   }
 
-  return parseModelFromBuffer(await response.arrayBuffer(), format)
+  const totalHeader = response.headers.get("content-length")
+  const total = totalHeader ? Number(totalHeader) : null
+  if (!response.body) {
+    const buffer = await response.arrayBuffer()
+    onProgress?.({ loaded: buffer.byteLength, total })
+    return buffer
+  }
+
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let loaded = 0
+
+  while (true) {
+    throwIfAborted(signal)
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+    chunks.push(value)
+    loaded += value.byteLength
+    onProgress?.({ loaded, total })
+  }
+
+  const buffer = new Uint8Array(loaded)
+  let offset = 0
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+
+  return buffer.buffer
 }
 
 function createDefaultModelMaterial(
