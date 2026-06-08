@@ -91,6 +91,7 @@ export function SceneCanvas({
     null,
   )
   const sceneBoundsRef = useRef(sceneBounds)
+  const requestRenderRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     sceneBoundsRef.current = sceneBounds
@@ -133,6 +134,7 @@ export function SceneCanvas({
         up,
         viewPreset,
       })
+      requestRenderRef.current()
     }
     resize()
     const updateCompass = () => {
@@ -197,26 +199,40 @@ export function SceneCanvas({
     canvas.addEventListener("pointermove", onPointerMove)
     canvas.addEventListener("pointerleave", onPointerLeave)
 
-    let animationFrame = 0
+    let animationFrame: number | null = null
     const render = () => {
-      animationFrame = window.requestAnimationFrame(render)
-      controls.update()
+      animationFrame = null
+      const controlsMoved = controls.update()
       updateCompass()
       renderer.clear()
       renderer.render(scene, camera)
       renderer.clearDepth()
       renderer.render(overlayScene, camera)
+      if (controlsMoved) {
+        requestRender()
+      }
     }
-    render()
+    const requestRender = () => {
+      if (animationFrame !== null) {
+        return
+      }
+      animationFrame = window.requestAnimationFrame(render)
+    }
+    requestRenderRef.current = requestRender
+    controls.addEventListener("change", requestRender)
+    requestRender()
 
     const observer = new ResizeObserver(resize)
     observer.observe(canvas)
 
     return () => {
-      window.cancelAnimationFrame(animationFrame)
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame)
+      }
       observer.disconnect()
       canvas.removeEventListener("pointermove", onPointerMove)
       canvas.removeEventListener("pointerleave", onPointerLeave)
+      controls.removeEventListener("change", requestRender)
       controls.dispose()
       renderer.dispose()
       disposeScene(scene)
@@ -228,6 +244,7 @@ export function SceneCanvas({
       controlsRef.current = null
       sceneRef.current = null
       overlaySceneRef.current = null
+      requestRenderRef.current = () => {}
       setCompassPoints(null)
     }
   }, [projection, up, viewPreset])
@@ -250,6 +267,7 @@ export function SceneCanvas({
       up,
       viewPreset,
     })
+    requestRenderRef.current()
   }, [fitRequest])
 
   useEffect(() => {
@@ -267,6 +285,7 @@ export function SceneCanvas({
     for (const object of buildResult?.overlayObjects ?? []) {
       overlayScene.add(object)
     }
+    requestRenderRef.current()
   }, [buildScene, projection, up, viewPreset])
 
   return (
