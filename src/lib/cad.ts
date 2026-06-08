@@ -302,7 +302,7 @@ function throwIfAborted(signal: AbortSignal | undefined) {
   }
 }
 
-async function fetchModelBuffer(
+export async function fetchModelBuffer(
   url: string,
   { signal, onProgress }: ModelLoadOptions,
 ) {
