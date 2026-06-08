@@ -2,10 +2,12 @@ import { useEffect, useState } from "react"
 import {
   detectModelFormat,
   disposeModelObject,
+  fetchModelBuffer,
   parseModelFromBuffer,
   parseModelFromUnknownBuffer,
   parseModelFromUrl,
 } from "../lib/cad"
+import { parseModelFromBufferInWorker } from "../lib/cadWorker"
 import { getCadGeometryIdleMessage } from "../app/utils/modelSourceMessageUtils"
 import type { CadGeometryState, ModelSource } from "../app/types"
 
@@ -58,7 +60,7 @@ export function useCadGeometry(source: ModelSource): CadGeometryState {
 
     const controller = new AbortController()
     const loadGeometry = async () => {
-      if (source.kind === "url" && format) {
+      if (source.kind === "url" && (format === "gltf" || format === "glb")) {
         return {
           model: await parseModelFromUrl(source.value, format, {
             signal: controller.signal,
@@ -81,26 +83,41 @@ export function useCadGeometry(source: ModelSource): CadGeometryState {
       const buffer =
         source.kind === "file"
           ? await source.file.arrayBuffer()
-          : await fetch(source.value, { signal: controller.signal }).then(
-              async (response) => {
-                if (!response.ok) {
-                  throw new Error(`Failed to fetch model (${response.status})`)
+          : await fetchModelBuffer(source.value, {
+              signal: controller.signal,
+              onProgress: ({ loaded, total }) => {
+                if (disposed || controller.signal.aborted) {
+                  return
                 }
-
-                return response.arrayBuffer()
+                setState((current) => ({
+                  ...current,
+                  status: "loading",
+                  message: formatProgressMessage(formatLabel, loaded, total),
+                  progress: total && total > 0 ? loaded / total : null,
+                }))
               },
-            )
+            })
 
       if (format) {
-        if (source.kind === "file") {
+        if (format === "gltf" || format === "glb") {
           setState((current) => ({
             ...current,
             status: "loading",
             message: `Parsing ${formatLabel} model...`,
             progress: null,
           }))
+          return { model: await parseModelFromBuffer(buffer, format), format }
         }
-        return { model: await parseModelFromBuffer(buffer, format), format }
+
+        setState((current) => ({
+          ...current,
+          status: "loading",
+          message: `Parsing ${formatLabel} model off the main thread...`,
+          progress: null,
+        }))
+        return parseModelFromBufferInWorker(buffer, format, {
+          signal: controller.signal,
+        })
       }
 
       setState((current) => ({
